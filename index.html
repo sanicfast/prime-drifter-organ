@@ -15,7 +15,8 @@
     <div class="display">
       <div class="display-item">
         <span class="label">frequency</span>
-        <span id="hz-display" class="value">220.00 Hz</span>
+        <span id="hz-display" class="value">264.00 Hz</span>
+        <span id="note-display" class="approx-note">≈ C4</span>
       </div>
       <div class="display-item">
         <span class="label">vector</span>
@@ -48,6 +49,15 @@
       <span id="pivot-indicator" class="mode-chip" data-tip="step pivot chord mode (n key)">step pivot ●</span>
       <span id="hold-indicator" class="mode-chip" data-tip="hold/perform mode (/ key)">hold ●</span>
       <span id="invert-indicator" class="mode-chip" data-tip="invert mode (m key)">inverted ●</span>
+    </div>
+
+    <div class="envelope">
+      <div class="env-title">initial root</div>
+      <div class="root-row">
+        <input type="range" id="base-hz" min="0" max="1" step="0.00001" value="0.56576"
+               data-tip="where the zero vector lives — 0 key always returns here">
+        <span id="base-hz-val">264.0 Hz ≈ C4</span>
+      </div>
     </div>
 
     <div class="envelope">
@@ -201,6 +211,8 @@
           <p>hold <kbd>space</kbd> — the organ breathes through whatever is armed.
           chord and root changes morph voices in and out mid-note. sliders shape
           attack, decay, sustain, release.</p>
+          <p>the <b>initial root</b> slider picks where zero lives (55–880 Hz) —
+          the hum, the <kbd>0</kbd> key, and undo all follow it home.</p>
         </section>
 
         <section>

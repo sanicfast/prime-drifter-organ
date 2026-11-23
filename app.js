@@ -2,7 +2,9 @@
 
 // === App State ===
 
-const BASE_HZ = 220;
+const ROOT_HZ_LOW = 55;   // slider bounds for the initial root
+const ROOT_HZ_HIGH = 880;
+let baseHz = 264;         // where vector [0,0,0,0] lives (default C4 = 264 Hz) — also the hum's pitch
 const VOLUME = 0.3;
 const HUM_VOLUME = 0.05;
 const HUM_FADE = 0.4;
@@ -42,6 +44,7 @@ let envelope = {
 // === DOM Elements ===
 
 const hzDisplay = document.getElementById('hz-display');
+const noteDisplay = document.getElementById('note-display');
 const stateDisplay = document.getElementById('state-display');
 const moveDisplay = document.getElementById('move-display');
 const chordDisplay = document.getElementById('chord-display');
@@ -76,6 +79,38 @@ function setupSliders() {
   }
 }
 
+// === Initial Root Control ===
+
+// Log-scale slider: 55..880 Hz, with 220 at center
+function rootHzFromSlider(t) {
+  return ROOT_HZ_LOW * Math.pow(2, t * Math.log2(ROOT_HZ_HIGH / ROOT_HZ_LOW));
+}
+
+const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']; // index = midi % 12
+
+// Nearest equal-tempered note — a courtesy label (≈), not a promise
+function approxNoteName(hz) {
+  const midi = 69 + Math.round(12 * Math.log2(hz / 440));
+  const name = NOTE_NAMES[((midi % 12) + 12) % 12];
+  return `${name}${Math.floor(midi / 12) - 1}`;
+}
+
+function setupRootControl() {
+  const input = document.getElementById('base-hz');
+  const label = document.getElementById('base-hz-val');
+
+  const update = () => {
+    baseHz = rootHzFromSlider(parseFloat(input.value));
+    label.textContent = `${baseHz.toFixed(1)} Hz ≈ ${approxNoteName(baseHz)}`;
+    updateDisplay();
+    updateFrequencyIfSounding(); // glides a held chord
+    retuneHum();
+  };
+
+  input.addEventListener('input', update);
+  update();
+}
+
 // === Audio ===
 
 function initAudio() {
@@ -95,7 +130,7 @@ function initAudio() {
 }
 
 function getAudibleFreq() {
-  return foldToAudible(currentVector.toFrequency(BASE_HZ));
+  return foldToAudible(currentVector.toFrequency(baseHz));
 }
 
 function createVoice(freq, key) {
@@ -362,7 +397,7 @@ function startHum() {
   if (humNodes) return;
   initAudio();
 
-  const freq = foldToAudible(BASE_HZ);
+  const freq = foldToAudible(baseHz);
   const now = audioCtx.currentTime;
 
   // Independent chain: never touches masterGain, so it's unaffected by the note envelope
@@ -417,6 +452,15 @@ function toggleHum() {
 function setHumActive(on) {
   humIndicator.classList.toggle('active', on);
   highlightKey('Period', on);
+}
+
+// The hum tracks the initial root as the slider moves
+function retuneHum() {
+  if (!humNodes) return;
+  const freq = foldToAudible(baseHz);
+  const now = audioCtx.currentTime;
+  humNodes.oscs[0].frequency.setTargetAtTime(freq, now, 0.02);
+  humNodes.oscs[1].frequency.setTargetAtTime(freq * 2, now, 0.02);
 }
 
 // === Step Pivot Chord Mode ===
@@ -564,6 +608,7 @@ function updateDisplay(moveName) {
   const freq = getAudibleFreq();
 
   hzDisplay.textContent = `${freq.toFixed(2)} Hz`;
+  noteDisplay.textContent = `≈ ${approxNoteName(freq)}`;
   for (let i = 0; i < 4; i++) {
     vecEls[i].textContent = currentVector.exp[i];
   }
@@ -866,4 +911,5 @@ document.addEventListener('pointercancel', releaseMouseKey);
 // === Init ===
 
 setupSliders();
+setupRootControl();
 updateDisplay();

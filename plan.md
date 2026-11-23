@@ -188,6 +188,17 @@ Tech stack: vanilla HTML / CSS / JS, Web Audio API, Canvas for visualization. No
 
 ---
 
+## Step 18 — Initial Root Control (post-plan addition)
+
+**Goal:** Pick where the zero vector starts.
+
+- Log slider, 55–880 Hz, sets `baseHz` live (default C4 = 264 Hz, scientific pitch)
+- Glides sounding voices and retunes the tonic hum while dragging
+- Readout shows approximate equal-tempered note name as a courtesy (≈)
+- A setting, not a move: stays out of the undo stack; `0` always returns here
+
+---
+
 ## Step 13 — Step Pivot Chord Mode
 
 **Goal:** Chords can act as root transposers.
