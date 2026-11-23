@@ -121,7 +121,7 @@ h1 {
   color: #7fdbca;
 }
 
-.hum-indicator {
+.mode-chip {
   font-size: 0.7rem;
   color: #3a3a4e;
   border: 1px solid #2a2a3e;
@@ -129,7 +129,7 @@ h1 {
   padding: 2px 8px;
 }
 
-.hum-indicator.active {
+.mode-chip.active {
   color: #e6b877;
   border-color: #a07840;
   box-shadow: 0 0 6px #e6b87744;

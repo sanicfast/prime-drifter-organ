@@ -151,3 +151,18 @@ const ADDITIVE_RATIOS = {
   'KeyO': { ratio: '3:2', vector: new PrimeVector(-1, 1, 0, 0) },
   'KeyP': { ratio: '7:4', vector: new PrimeVector(-2, 0, 0, 1) },
 };
+
+// === Voice Ratio Labels ===
+// Human-readable names for chord/additive voices, keyed by vectorKey().
+
+const VOICE_LABELS = {
+  '0,0,0,0': '1:1',
+  '-3,2,0,0': '9:8',
+  '-2,0,1,0': '5:4',
+  '1,1,-1,0': '6:5',
+  '2,-1,0,0': '4:3',
+  '-1,1,0,0': '3:2',
+  '-2,0,0,1': '7:4',
+  '1,0,0,0': '2:1',
+  '-1,0,1,0': '5:2',
+};

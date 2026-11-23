@@ -20,6 +20,7 @@ let lastMove = null;
 let activeChord = null; // key code of active chord preset, or null
 let activeAdditives = new Set(); // set of key codes for active additive ratios
 let humNodes = null; // tonic hum voice { oscs, gains }, or null when off
+let pivotMode = false; // step pivot chord mode: chords step the root on note-off
 
 // === Undo / Redo ===
 
@@ -42,6 +43,7 @@ const stateDisplay = document.getElementById('state-display');
 const moveDisplay = document.getElementById('move-display');
 const chordDisplay = document.getElementById('chord-display');
 const humIndicator = document.getElementById('hum-indicator');
+const pivotIndicator = document.getElementById('pivot-indicator');
 const vecEls = [
   document.getElementById('vec-0'),
   document.getElementById('vec-1'),
@@ -195,8 +197,7 @@ function vectorKey(v) {
   return v.exp.join(',');
 }
 
-function getChordVoicing() {
-  const rootFreq = getAudibleFreq();
+function getVoiceVectors() {
   const rootVec = new PrimeVector(0, 0, 0, 0);
 
   // Build voice set from chord + additive using XOR
@@ -230,7 +231,12 @@ function getChordVoicing() {
     }
   }
 
-  return voiceVectors.map(v => ({
+  return voiceVectors;
+}
+
+function getChordVoicing() {
+  const rootFreq = getAudibleFreq();
+  return getVoiceVectors().map(v => ({
     key: vectorKey(v),
     freq: rootFreq * v.toFrequency(1),
   }));
@@ -403,6 +409,69 @@ function setHumActive(on) {
   highlightKey('Period', on);
 }
 
+// === Step Pivot Chord Mode ===
+
+const ROOT_KEY = vectorKey(new PrimeVector(0, 0, 0, 0));
+
+function togglePivot() {
+  pivotMode = !pivotMode;
+  pivotIndicator.classList.toggle('active', pivotMode);
+  highlightKey('KeyN', pivotMode);
+}
+
+// Highest-sounding voice by ratio (not folded hz, which folding could scramble)
+function getHighestVoiceVector() {
+  let highest = null;
+  for (const v of getVoiceVectors()) {
+    if (!highest || v.toFrequency(1) > highest.toFrequency(1)) {
+      highest = v;
+    }
+  }
+  return highest;
+}
+
+function pivotLabel(vec) {
+  return `pivot ${VOICE_LABELS[vectorKey(vec)] || 'voice'}`;
+}
+
+// Pivot at note-off: the chord already finished ringing; step the root silently.
+function pivotRoot() {
+  if (!pivotMode) return;
+
+  const highest = getHighestVoiceVector();
+  if (!highest || highest.isZero()) return; // root only: nothing to step to
+
+  const label = pivotLabel(highest);
+  pushUndo(highest, label);
+  currentVector = currentVector.add(highest);
+  updateDisplay(label);
+}
+
+// Pivot while still holding space (chord cleared with , in pivot mode):
+// voices below the highest crossfade out and the highest voice relabels as
+// the new root, so it keeps ringing with no re-attack — its frequency equals
+// the new root's, modulo octave folding.
+function landOnTopVoice() {
+  const highest = getHighestVoiceVector();
+  if (!highest || highest.isZero()) {
+    clearVoicing();
+    updateDisplay();
+    updateFrequencyIfSounding();
+    return;
+  }
+
+  const topVoice = voices.find(v => v.key === vectorKey(highest));
+  if (topVoice) topVoice.key = ROOT_KEY; // relabel before the voice diff so it survives
+
+  const label = pivotLabel(highest);
+  pushUndo(highest, label);
+  currentVector = currentVector.add(highest);
+
+  clearVoicing();
+  updateDisplay(label);
+  updateFrequencyIfSounding();
+}
+
 // === Display ===
 
 function updateDisplay(moveName) {
@@ -420,6 +489,11 @@ function updateDisplay(moveName) {
   }
 
   // Chord display
+  chordDisplay.textContent = chordLabel() || 'none';
+}
+
+// Current chord + additive display text, e.g. "Major Triad + 9:8"
+function chordLabel() {
   const parts = [];
   if (activeChord) {
     parts.push(CHORD_PRESETS[activeChord].name);
@@ -427,7 +501,7 @@ function updateDisplay(moveName) {
   for (const code of activeAdditives) {
     parts.push(ADDITIVE_RATIOS[code].ratio);
   }
-  chordDisplay.textContent = parts.length ? parts.join(' + ') : 'none';
+  return parts.join(' + ');
 }
 
 // === Key Highlight ===
@@ -463,6 +537,18 @@ function redo() {
 }
 
 // === Keyboard Input ===
+
+// Deactivate chord preset + additive toggles (and their key highlights)
+function clearVoicing() {
+  if (activeChord) {
+    highlightKey(activeChord, false);
+    activeChord = null;
+  }
+  for (const code of activeAdditives) {
+    highlightKey(code, false);
+  }
+  activeAdditives.clear();
+}
 
 function handleKeyDown(e) {
   if (e.repeat) return;
@@ -547,16 +633,15 @@ function handleKeyDown(e) {
   if (e.code === 'Comma') {
     e.preventDefault();
     highlightKey('Comma', true);
-    if (activeChord) {
-      highlightKey(activeChord, false);
-      activeChord = null;
+    // In pivot mode, clearing a sounding chord "lands" the root on its
+    // highest voice: the chord fades and that voice continues as new root.
+    if (pivotMode && isSounding) {
+      landOnTopVoice();
+    } else {
+      clearVoicing();
+      updateDisplay();
+      updateFrequencyIfSounding();
     }
-    for (const code of activeAdditives) {
-      highlightKey(code, false);
-    }
-    activeAdditives.clear();
-    updateDisplay();
-    updateFrequencyIfSounding();
     return;
   }
 
@@ -564,6 +649,13 @@ function handleKeyDown(e) {
   if (e.code === 'Period') {
     e.preventDefault();
     toggleHum();
+    return;
+  }
+
+  // Step pivot mode toggle
+  if (e.code === 'KeyN') {
+    e.preventDefault();
+    togglePivot();
     return;
   }
 
@@ -581,13 +673,16 @@ function handleKeyDown(e) {
 }
 
 function handleKeyUp(e) {
-  // Don't un-highlight toggle keys (chords, additives, hum stay lit)
-  if (!CHORD_PRESETS[e.code] && !ADDITIVE_RATIOS[e.code] && e.code !== 'Period') {
+  // Don't un-highlight toggle keys (chords, additives, hum, pivot stay lit)
+  if (!CHORD_PRESETS[e.code] && !ADDITIVE_RATIOS[e.code] && e.code !== 'Period' && e.code !== 'KeyN') {
     highlightKey(e.code, false);
   }
 
   if (e.code === 'Space') {
+    const wasSounding = isSounding;
     stopTone();
+    // A chord that just finished sounding steps the root, in pivot mode
+    if (wasSounding) pivotRoot();
   }
 }
 

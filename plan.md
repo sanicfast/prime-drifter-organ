@@ -182,6 +182,7 @@ Tech stack: vanilla HTML / CSS / JS, Web Audio API, Canvas for visualization. No
 
 - `n` toggles step pivot mode
 - When ON: after spacebar sounds a chord, root vector advances by the prime vector of the highest ratio in that chord
+- While holding a note in pivot mode, `,` lands on the top voice: lower voices fade, that voice relabels as the new root and keeps ringing
 - When OFF (default): chords don't affect root
 - Visual indicator for mode
 - Integrate with undo system
