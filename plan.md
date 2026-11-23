@@ -176,6 +176,18 @@ Tech stack: vanilla HTML / CSS / JS, Web Audio API, Canvas for visualization. No
 
 ---
 
+## Step 17 — Invert Mode (post-plan addition)
+
+**Goal:** Play chords upside down.
+
+- `m` toggles invert mode
+- Chord and additive voices become their reciprocals: major = root + 4:5 + 2:3
+- Pivot steps to the voice farthest from the root — upward normally, downward when inverted
+- Toggling while a chord sounds live-flips the voicing via the voice crossfade
+- Left-hand root navigation unaffected
+
+---
+
 ## Step 13 — Step Pivot Chord Mode
 
 **Goal:** Chords can act as root transposers.

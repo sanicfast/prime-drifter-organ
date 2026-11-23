@@ -71,6 +71,8 @@ So here's my concept for a novel musical instrument:
 - n to engage step pivot chord mode
   - off (default) chords sound relative to your current root hz. they do not update the root hz.
   - on - after a chord sounds, the root hz is updated with the highest ratio of the chord being added into the prime exponent vector.
+### upside down chord mode
+- m to toggle into a mode that plays an upside down chord so rather than a major, which is root + 5:4 + 3:2, it would be root + 4:5 + 2:3. and rather than the pivot going up, it would go down.
 
 ## Cheatsheet
 

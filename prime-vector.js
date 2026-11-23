@@ -154,6 +154,7 @@ const ADDITIVE_RATIOS = {
 
 // === Voice Ratio Labels ===
 // Human-readable names for chord/additive voices, keyed by vectorKey().
+// Includes reciprocals for invert mode.
 
 const VOICE_LABELS = {
   '0,0,0,0': '1:1',
@@ -165,4 +166,12 @@ const VOICE_LABELS = {
   '-2,0,0,1': '7:4',
   '1,0,0,0': '2:1',
   '-1,0,1,0': '5:2',
+  '3,-2,0,0': '8:9',
+  '2,0,-1,0': '4:5',
+  '-1,-1,1,0': '5:6',
+  '-2,1,0,0': '3:4',
+  '1,-1,0,0': '2:3',
+  '2,0,0,-1': '4:7',
+  '-1,0,0,0': '1:2',
+  '1,0,-1,0': '2:5',
 };

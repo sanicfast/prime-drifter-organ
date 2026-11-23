@@ -21,6 +21,9 @@ let activeChord = null; // key code of active chord preset, or null
 let activeAdditives = new Set(); // set of key codes for active additive ratios
 let humNodes = null; // tonic hum voice { oscs, gains }, or null when off
 let pivotMode = false; // step pivot chord mode: chords step the root on note-off
+let holdMode = false; // hold/perform mode: voicing keys are momentary
+let heldChordStack = []; // chord keys physically down, bottom-first (hold mode)
+let invertedMode = false; // invert mode: chords hang below the root
 
 // === Undo / Redo ===
 
@@ -44,6 +47,8 @@ const moveDisplay = document.getElementById('move-display');
 const chordDisplay = document.getElementById('chord-display');
 const humIndicator = document.getElementById('hum-indicator');
 const pivotIndicator = document.getElementById('pivot-indicator');
+const holdIndicator = document.getElementById('hold-indicator');
+const invertIndicator = document.getElementById('invert-indicator');
 const vecEls = [
   document.getElementById('vec-0'),
   document.getElementById('vec-1'),
@@ -231,6 +236,11 @@ function getVoiceVectors() {
     }
   }
 
+  if (invertedMode) {
+    // Invert mode: every voice but the root becomes its reciprocal, so the
+    // chord hangs below the root (major = root + 4:5 + 2:3)
+    return voiceVectors.map(v => v.isZero() ? v : v.negate());
+  }
   return voiceVectors;
 }
 
@@ -419,15 +429,22 @@ function togglePivot() {
   highlightKey('KeyN', pivotMode);
 }
 
-// Highest-sounding voice by ratio (not folded hz, which folding could scramble)
-function getHighestVoiceVector() {
-  let highest = null;
+// The pivot lands on the voice farthest from the root (in log space): the
+// highest normally, the lowest when inverted. Not folded hz, which folding
+// could scramble.
+function pivotDistance(vec) {
+  const r = vec.toFrequency(1);
+  return Math.max(r, 1 / r);
+}
+
+function getPivotVoiceVector() {
+  let farthest = null;
   for (const v of getVoiceVectors()) {
-    if (!highest || v.toFrequency(1) > highest.toFrequency(1)) {
-      highest = v;
+    if (!farthest || pivotDistance(v) > pivotDistance(farthest)) {
+      farthest = v;
     }
   }
-  return highest;
+  return farthest;
 }
 
 function pivotLabel(vec) {
@@ -438,37 +455,106 @@ function pivotLabel(vec) {
 function pivotRoot() {
   if (!pivotMode) return;
 
-  const highest = getHighestVoiceVector();
-  if (!highest || highest.isZero()) return; // root only: nothing to step to
+  const farthest = getPivotVoiceVector();
+  if (!farthest || farthest.isZero()) return; // root only: nothing to step to
 
-  const label = pivotLabel(highest);
-  pushUndo(highest, label);
-  currentVector = currentVector.add(highest);
+  const label = pivotLabel(farthest);
+  pushUndo(farthest, label);
+  currentVector = currentVector.add(farthest);
   updateDisplay(label);
 }
 
 // Pivot while still holding space (chord cleared with , in pivot mode):
-// voices below the highest crossfade out and the highest voice relabels as
-// the new root, so it keeps ringing with no re-attack — its frequency equals
-// the new root's, modulo octave folding.
-function landOnTopVoice() {
-  const highest = getHighestVoiceVector();
-  if (!highest || highest.isZero()) {
+// the voices nearer the root crossfade out and the farthest voice relabels
+// as the new root, so it keeps ringing with no re-attack — its frequency
+// equals the new root's, modulo octave folding.
+function landOnPivotVoice() {
+  const farthest = getPivotVoiceVector();
+  if (!farthest || farthest.isZero()) {
     clearVoicing();
     updateDisplay();
     updateFrequencyIfSounding();
     return;
   }
 
-  const topVoice = voices.find(v => v.key === vectorKey(highest));
-  if (topVoice) topVoice.key = ROOT_KEY; // relabel before the voice diff so it survives
+  const outerVoice = voices.find(v => v.key === vectorKey(farthest));
+  if (outerVoice) outerVoice.key = ROOT_KEY; // relabel before the voice diff so it survives
 
-  const label = pivotLabel(highest);
-  pushUndo(highest, label);
-  currentVector = currentVector.add(highest);
+  const label = pivotLabel(farthest);
+  pushUndo(farthest, label);
+  currentVector = currentVector.add(farthest);
 
   clearVoicing();
   updateDisplay(label);
+  updateFrequencyIfSounding();
+}
+
+// === Invert Mode ===
+
+// Chord and additive voices become their reciprocals: chords hang below the
+// root (major = root + 4:5 + 2:3) and the pivot steps downward. Left-hand
+// root navigation is unaffected. Toggling while a chord sounds live-flips
+// the voicing via the voice crossfade.
+function toggleInvert() {
+  invertedMode = !invertedMode;
+  invertIndicator.classList.toggle('active', invertedMode);
+  highlightKey('KeyM', invertedMode);
+  updateDisplay();
+  if (isSounding) updateFrequencyIfSounding();
+}
+
+// === Hold / Perform Mode ===
+
+// In hold mode, voicing keys are momentary: chord presets and additive
+// ratios only sound while physically pressed (mouse holds behave the same).
+
+const MODE_KEYS = new Set(['Period', 'KeyN', 'Slash', 'KeyM']); // their highlight reflects mode state
+
+function toggleHold() {
+  holdMode = !holdMode;
+  clearVoicing();
+  holdIndicator.classList.toggle('active', holdMode);
+  highlightKey('Slash', holdMode);
+  if (isSounding) updateFrequencyIfSounding();
+}
+
+// Chord keys keep mutual exclusion while momentary: each press goes on top
+// of the stack, releasing reveals a still-held chord underneath.
+function pressHeldChord(code) {
+  const i = heldChordStack.indexOf(code);
+  if (i !== -1) heldChordStack.splice(i, 1);
+  heldChordStack.push(code);
+  applyHeldChordStack();
+}
+
+function releaseHeldChord(code) {
+  const i = heldChordStack.indexOf(code);
+  if (i === -1) return;
+  heldChordStack.splice(i, 1);
+  applyHeldChordStack();
+}
+
+function applyHeldChordStack() {
+  const top = heldChordStack.length > 0 ? heldChordStack[heldChordStack.length - 1] : null;
+  if (activeChord === top) return;
+  if (activeChord) highlightKey(activeChord, false);
+  activeChord = top;
+  if (top) highlightKey(top, true);
+  updateDisplay();
+  updateFrequencyIfSounding();
+}
+
+function pressHeldAdditive(code) {
+  activeAdditives.add(code);
+  highlightKey(code, true);
+  updateDisplay();
+  updateFrequencyIfSounding();
+}
+
+function releaseHeldAdditive(code) {
+  if (!activeAdditives.delete(code)) return;
+  highlightKey(code, false);
+  updateDisplay();
   updateFrequencyIfSounding();
 }
 
@@ -499,9 +585,16 @@ function chordLabel() {
     parts.push(CHORD_PRESETS[activeChord].name);
   }
   for (const code of activeAdditives) {
-    parts.push(ADDITIVE_RATIOS[code].ratio);
+    const ratio = ADDITIVE_RATIOS[code].ratio;
+    parts.push(invertedMode ? flipRatio(ratio) : ratio);
   }
   return parts.join(' + ');
+}
+
+// Invert a ratio label: "5:4" -> "4:5"
+function flipRatio(r) {
+  const [a, b] = r.split(':');
+  return b + ':' + a;
 }
 
 // === Key Highlight ===
@@ -548,6 +641,7 @@ function clearVoicing() {
     highlightKey(code, false);
   }
   activeAdditives.clear();
+  heldChordStack = [];
 }
 
 function handleKeyDown(e) {
@@ -587,9 +681,13 @@ function handleKeyDown(e) {
     return;
   }
 
-  // Chord presets (mutually exclusive toggle)
+  // Chord presets (mutually exclusive; momentary in hold mode)
   if (CHORD_PRESETS[e.code]) {
     e.preventDefault();
+    if (holdMode) {
+      pressHeldChord(e.code);
+      return;
+    }
     // Clear additives when switching chord
     if (activeAdditives.size > 0) {
       for (const code of activeAdditives) {
@@ -614,9 +712,13 @@ function handleKeyDown(e) {
     return;
   }
 
-  // Additive ratio toggles (non-exclusive)
+  // Additive ratio toggles (non-exclusive; momentary in hold mode)
   if (ADDITIVE_RATIOS[e.code]) {
     e.preventDefault();
+    if (holdMode) {
+      pressHeldAdditive(e.code);
+      return;
+    }
     if (activeAdditives.has(e.code)) {
       activeAdditives.delete(e.code);
       highlightKey(e.code, false);
@@ -634,9 +736,9 @@ function handleKeyDown(e) {
     e.preventDefault();
     highlightKey('Comma', true);
     // In pivot mode, clearing a sounding chord "lands" the root on its
-    // highest voice: the chord fades and that voice continues as new root.
+    // outermost voice: the chord fades and that voice continues as new root.
     if (pivotMode && isSounding) {
-      landOnTopVoice();
+      landOnPivotVoice();
     } else {
       clearVoicing();
       updateDisplay();
@@ -659,6 +761,20 @@ function handleKeyDown(e) {
     return;
   }
 
+  // Hold/perform mode toggle
+  if (e.code === 'Slash') {
+    e.preventDefault();
+    toggleHold();
+    return;
+  }
+
+  // Invert mode toggle
+  if (e.code === 'KeyM') {
+    e.preventDefault();
+    toggleInvert();
+    return;
+  }
+
   // Movement keys
   const move = ALL_MOVES[e.code];
   if (move) {
@@ -673,8 +789,12 @@ function handleKeyDown(e) {
 }
 
 function handleKeyUp(e) {
-  // Don't un-highlight toggle keys (chords, additives, hum, pivot stay lit)
-  if (!CHORD_PRESETS[e.code] && !ADDITIVE_RATIOS[e.code] && e.code !== 'Period' && e.code !== 'KeyN') {
+  if (holdMode && CHORD_PRESETS[e.code]) {
+    releaseHeldChord(e.code);
+  } else if (holdMode && ADDITIVE_RATIOS[e.code]) {
+    releaseHeldAdditive(e.code);
+  } else if (!CHORD_PRESETS[e.code] && !ADDITIVE_RATIOS[e.code] && !MODE_KEYS.has(e.code)) {
+    // Don't un-highlight mode keys (hum, pivot, hold stay lit)
     highlightKey(e.code, false);
   }
 
