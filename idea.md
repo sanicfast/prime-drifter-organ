@@ -24,8 +24,8 @@ So here's my concept for a novel musical instrument:
 
 ### Left Hand — Root Navigation
 
-- 12345 and zxcvb are reciprocal big moves like 2:1, 3:1, 4:1, 7:4, 9:8 or 5:2
-- qwert/asdfg are reciprocal smaller moves like 3:2, 4:3, 5:4, 6:5, 7:5
+- 12345 and zxcvb are reciprocal big moves like 2:1, 3:1, 12:5, 7:4, 9:8
+- qwert/asdfg are reciprocal smaller moves like 3:2, 4:3, 5:4, 6:5, 16:15
 
 ### Right Hand — Chords
 

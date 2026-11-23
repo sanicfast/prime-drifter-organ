@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prime Drifter Organ</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Prime Drifter Organ</h1>
+    <p class="tagline">drifting just-intonation organ built on prime-ratio vectors</p>
+
+    <div class="display">
+      <div class="display-item">
+        <span class="label">frequency</span>
+        <span id="hz-display" class="value">220.00 Hz</span>
+      </div>
+      <div class="display-item">
+        <span class="label">vector</span>
+        <div id="vector-display" class="vector-grid">
+          <span class="vec-bracket">[</span>
+          <div class="vec-col"><span class="vec-prime">2</span><span class="vec-val" id="vec-0">0</span></div>
+          <span class="vec-comma">,</span>
+          <div class="vec-col"><span class="vec-prime">3</span><span class="vec-val" id="vec-1">0</span></div>
+          <span class="vec-comma">,</span>
+          <div class="vec-col"><span class="vec-prime">5</span><span class="vec-val" id="vec-2">0</span></div>
+          <span class="vec-comma">,</span>
+          <div class="vec-col"><span class="vec-prime">7</span><span class="vec-val" id="vec-3">0</span></div>
+          <span class="vec-bracket">]</span>
+        </div>
+      </div>
+      <div class="display-item">
+        <span class="label">last move</span>
+        <span id="move-display" class="value">root</span>
+      </div>
+      <div class="display-item">
+        <span class="label">chord</span>
+        <span id="chord-display" class="value">none</span>
+      </div>
+    </div>
+
+    <div class="state-row">
+      <span id="state-display">idle</span>
+      <span class="state-hint">hold <kbd>space</kbd> to sound</span>
+    </div>
+
+    <div class="envelope">
+      <div class="env-title">envelope</div>
+      <div class="env-controls">
+        <div class="env-slider">
+          <label for="env-a">attack</label>
+          <input type="range" id="env-a" min="0.005" max="0.5" step="0.005" value="0.05">
+          <span id="env-a-val">0.050s</span>
+        </div>
+        <div class="env-slider">
+          <label for="env-d">decay</label>
+          <input type="range" id="env-d" min="0.01" max="1" step="0.01" value="0.1">
+          <span id="env-d-val">0.10s</span>
+        </div>
+        <div class="env-slider">
+          <label for="env-s">sustain</label>
+          <input type="range" id="env-s" min="0" max="1" step="0.05" value="0.7">
+          <span id="env-s-val">0.70</span>
+        </div>
+        <div class="env-slider">
+          <label for="env-r">release</label>
+          <input type="range" id="env-r" min="0.01" max="2" step="0.01" value="0.3">
+          <span id="env-r-val">0.30s</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="cheatsheet-grid">
+      <!-- Row 1: number row -->
+      <div class="cheat-key" data-key="Digit1" title="Octave up"><kbd>1</kbd><span>2:1</span></div>
+      <div class="cheat-key" data-key="Digit2" title="Twelfth up (octave + fifth)"><kbd>2</kbd><span>3:1</span></div>
+      <div class="cheat-key" data-key="Digit3" title="Lesser minor seventh up"><kbd>3</kbd><span>12:5</span></div>
+      <div class="cheat-key" data-key="Digit4" title="Harmonic seventh up"><kbd>4</kbd><span>7:4</span></div>
+      <div class="cheat-key" data-key="Digit5" title="Whole tone up"><kbd>5</kbd><span>9:8</span></div>
+      <div class="kb-gap-cell"></div>
+      <div class="cheat-key placeholder"><kbd>6</kbd><span></span></div>
+      <div class="cheat-key placeholder"><kbd>7</kbd><span></span></div>
+      <div class="cheat-key placeholder"><kbd>8</kbd><span></span></div>
+      <div class="cheat-key placeholder"><kbd>9</kbd><span></span></div>
+      <div class="cheat-key" data-key="Digit0" title="Return to starting root"><kbd>0</kbd><span>reset</span></div>
+      <div class="cheat-key placeholder"><kbd>-</kbd><span></span></div>
+      <div class="cheat-key placeholder"><kbd>=</kbd><span></span></div>
+      <div class="cheat-key" data-key="Backspace" title="Undo last root move"><kbd>⌫</kbd><span>undo</span></div>
+
+      <!-- Row 2: top row -->
+      <div class="cheat-key" data-key="KeyQ" title="Perfect fifth up"><kbd>Q</kbd><span>3:2</span></div>
+      <div class="cheat-key" data-key="KeyW" title="Perfect fourth up"><kbd>W</kbd><span>4:3</span></div>
+      <div class="cheat-key" data-key="KeyE" title="Major third up"><kbd>E</kbd><span>5:4</span></div>
+      <div class="cheat-key" data-key="KeyR" title="Minor third up"><kbd>R</kbd><span>6:5</span></div>
+      <div class="cheat-key" data-key="KeyT" title="Semitone up"><kbd>T</kbd><span>16:15</span></div>
+      <div class="kb-gap-cell"></div>
+      <div class="cheat-key chord" data-key="KeyY" title="Additive whole tone (XOR)"><kbd>Y</kbd><span>9:8</span></div>
+      <div class="cheat-key chord" data-key="KeyU" title="Additive major third (XOR)"><kbd>U</kbd><span>5:4</span></div>
+      <div class="cheat-key chord" data-key="KeyI" title="Additive perfect fourth (XOR)"><kbd>I</kbd><span>4:3</span></div>
+      <div class="cheat-key chord" data-key="KeyO" title="Additive perfect fifth (XOR)"><kbd>O</kbd><span>3:2</span></div>
+      <div class="cheat-key chord" data-key="KeyP" title="Additive harmonic seventh (XOR)"><kbd>P</kbd><span>7:4</span></div>
+      <div class="cheat-key placeholder"><kbd>[</kbd><span></span></div>
+      <div class="cheat-key placeholder"><kbd>]</kbd><span></span></div>
+      <div class="cheat-key" data-key="Backslash" title="Redo undone move"><kbd>\</kbd><span>redo</span></div>
+
+      <!-- Row 3: home row -->
+      <div class="cheat-key" data-key="KeyA" title="Perfect fifth down"><kbd>A</kbd><span>2:3</span></div>
+      <div class="cheat-key" data-key="KeyS" title="Perfect fourth down"><kbd>S</kbd><span>3:4</span></div>
+      <div class="cheat-key" data-key="KeyD" title="Major third down"><kbd>D</kbd><span>4:5</span></div>
+      <div class="cheat-key" data-key="KeyF" title="Minor third down"><kbd>F</kbd><span>5:6</span></div>
+      <div class="cheat-key" data-key="KeyG" title="Semitone down"><kbd>G</kbd><span>15:16</span></div>
+      <div class="kb-gap-cell"></div>
+      <div class="cheat-key chord" data-key="KeyH" title="Root + 5:4 + 3:2"><kbd>H</kbd><span>major</span></div>
+      <div class="cheat-key chord" data-key="KeyJ" title="Root + 6:5 + 3:2"><kbd>J</kbd><span>minor</span></div>
+      <div class="cheat-key chord" data-key="KeyK" title="Root + 5:4 + 3:2 + 7:4"><kbd>K</kbd><span>7th</span></div>
+      <div class="cheat-key chord" data-key="KeyL" title="Root + 4:3 + 3:2"><kbd>L</kbd><span>sus4</span></div>
+      <div class="cheat-key chord" data-key="Semicolon" title="Root + 5:4 + 3:2 + 2"><kbd>;</kbd><span>wide</span></div>
+      <div class="cheat-key chord" data-key="Quote" title="Root + 3:2 + 5:2"><kbd>'</kbd><span>tenth</span></div>
+      <div class="kb-empty"></div>
+      <div class="kb-empty"></div>
+
+      <!-- Row 4: bottom row -->
+      <div class="cheat-key" data-key="KeyZ" title="Octave down"><kbd>Z</kbd><span>1:2</span></div>
+      <div class="cheat-key" data-key="KeyX" title="Twelfth down (octave + fifth)"><kbd>X</kbd><span>1:3</span></div>
+      <div class="cheat-key" data-key="KeyC" title="Lesser minor seventh down"><kbd>C</kbd><span>5:12</span></div>
+      <div class="cheat-key" data-key="KeyV" title="Harmonic seventh down"><kbd>V</kbd><span>4:7</span></div>
+      <div class="cheat-key" data-key="KeyB" title="Whole tone down"><kbd>B</kbd><span>8:9</span></div>
+      <div class="kb-gap-cell"></div>
+      <div class="cheat-key placeholder"><kbd>N</kbd><span></span></div>
+      <div class="cheat-key placeholder"><kbd>M</kbd><span></span></div>
+      <div class="cheat-key" data-key="Comma" title="Clear chord"><kbd>,</kbd><span>clear</span></div>
+      <div class="cheat-key placeholder"><kbd>.</kbd><span></span></div>
+      <div class="cheat-key placeholder"><kbd>/</kbd><span></span></div>
+      <div class="kb-empty"></div>
+      <div class="kb-empty"></div>
+      <div class="kb-empty"></div>
+    </div>
+
+    <div class="actions-row">
+      <div class="cheat-key" data-key="Space" title="Hold to sound"><kbd>space</kbd><span>sound</span></div>
+    </div>
+  </div>
+  <script src="prime-vector.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

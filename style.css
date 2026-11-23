@@ -1,0 +1,315 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Courier New', monospace;
+  background: #0f0f1a;
+  color: #d0d0e0;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.container {
+  text-align: center;
+  padding: 2rem;
+  width: 100%;
+  max-width: 900px;
+}
+
+h1 {
+  font-size: 1.6rem;
+  font-weight: normal;
+  letter-spacing: 0.1em;
+  color: #c0d8ff;
+  margin-bottom: 0.3rem;
+}
+
+.tagline {
+  font-size: 0.7rem;
+  color: #777;
+  font-style: italic;
+  margin-bottom: 2.5rem;
+}
+
+.display {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
+  gap: 1.5rem 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.display-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  align-items: center;
+}
+
+.label {
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: #888;
+}
+
+.value {
+  font-size: 1.5rem;
+  color: #ffffff;
+}
+
+.value.small {
+  font-size: 1.05rem;
+  color: #c8c8d8;
+}
+
+.vector-grid {
+  display: flex;
+  gap: 0.6rem;
+}
+
+.vec-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.vec-prime {
+  font-size: 0.7rem;
+  color: #999;
+}
+
+.vec-val {
+  font-size: 1.4rem;
+  color: #ffffff;
+  min-width: 1.5em;
+  text-align: center;
+}
+
+.vec-bracket {
+  font-size: 1.4rem;
+  color: #888;
+  align-self: flex-end;
+}
+
+.vec-comma {
+  font-size: 1.4rem;
+  color: #888;
+  align-self: flex-end;
+  margin: 0 -0.1rem;
+}
+
+.state-row {
+  margin-bottom: 2rem;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 1rem;
+}
+
+#state-display {
+  font-size: 1.2rem;
+  color: #888;
+}
+
+#state-display.sounding {
+  color: #7fdbca;
+}
+
+.state-hint {
+  font-size: 0.75rem;
+  color: #666;
+}
+
+kbd {
+  background: #2a2a42;
+  border: 1px solid #4a4a6a;
+  border-radius: 3px;
+  padding: 2px 7px;
+  font-size: 0.75rem;
+  color: #c8c8e0;
+}
+
+/* Envelope Controls */
+
+.envelope {
+  margin-bottom: 1.5rem;
+  padding: 1rem 1.5rem;
+  background: #161625;
+  border: 1px solid #2a2a3e;
+  border-radius: 6px;
+}
+
+.env-title {
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: #666;
+  margin-bottom: 0.8rem;
+}
+
+.env-controls {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+}
+
+.env-slider {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.env-slider label {
+  font-size: 0.65rem;
+  color: #888;
+  text-transform: lowercase;
+}
+
+.env-slider input[type="range"] {
+  width: 100%;
+  height: 4px;
+  appearance: none;
+  -webkit-appearance: none;
+  background: #2a2a42;
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+
+.env-slider input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  background: #7fdbca;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.env-slider input[type="range"]::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  background: #7fdbca;
+  border-radius: 50%;
+  cursor: pointer;
+  border: none;
+}
+
+.env-slider span {
+  font-size: 0.7rem;
+  color: #7fdbca;
+}
+
+/* Cheatsheet — keyboard grid */
+
+.cheatsheet-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 52px) 16px repeat(8, 52px);
+  gap: 6px;
+  justify-content: center;
+  margin-top: 1rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #2a2a3e;
+}
+
+.kb-gap-cell {
+  /* spacer column between hands */
+}
+
+.kb-empty {
+  /* empty cell for alignment */
+}
+
+.kb-span {
+  grid-column: span 3;
+}
+
+.actions-row {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  margin-top: 0.5rem;
+}
+
+.cheat-section-label {
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: #556;
+  margin-bottom: 0.2rem;
+  margin-top: 0.8rem;
+}
+
+.cheat-section-label.right-hand {
+  margin-top: 1.2rem;
+  color: #5a7;
+}
+
+.kb-right {
+  gap: 0.35rem;
+}
+
+.kb-gap {
+  width: 20px;
+}
+
+.cheat-key.chord kbd {
+  border-color: #4a6a4a;
+}
+
+.cheat-key.chord.active kbd {
+  background: #2a4a3a;
+  border-color: #7fdbca;
+  color: #ffffff;
+  box-shadow: 0 0 6px #7fdbca44;
+}
+
+.cheat-key.chord.active span {
+  color: #7fdbca;
+}
+
+.cheat-key.placeholder kbd {
+  border-color: #2a2a3e;
+  color: #555;
+}
+
+.cheat-key.placeholder span {
+  color: #333;
+}
+
+.cheat-key {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.cheat-key kbd {
+  font-size: 0.9rem;
+  padding: 5px 9px;
+  min-width: 34px;
+  text-align: center;
+}
+
+.cheat-key span {
+  font-size: 0.72rem;
+  color: #a0a0c0;
+}
+
+.cheat-key.active kbd {
+  background: #3a4a6a;
+  border-color: #7fdbca;
+  color: #ffffff;
+  box-shadow: 0 0 6px #7fdbca44;
+}
+
+.cheat-key.active span {
+  color: #7fdbca;
+}
