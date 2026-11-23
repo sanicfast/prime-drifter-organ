@@ -80,18 +80,22 @@ const majorThird = new PrimeVector(-2, 0, 1, 0); // 5:4
 const minorThird = new PrimeVector(1, 1, -1, 0); // 6:5
 assertFreq('major 3rd + minor 3rd = 5th', majorThird.add(minorThird), 220, 330);
 
+// The syntonic story: the big tone (9:8) and small tone (10:9) stack to a pure 5:4,
+// while two big tones give the sour Pythagorean 81:64
+assertVec('9:8 + 10:9 = pure major 3rd', new PrimeVector(-3, 2, 0, 0).add(new PrimeVector(1, -2, 1, 0)), [-2, 0, 1, 0]);
+
 // === Test Suite: Movement Key Correctness ===
 
 // Each movement key should produce the stated frequency ratio
 const expectedRatios = {
   'Digit1': 2 / 1,
   'Digit2': 3 / 1,
-  'Digit3': 12 / 5,
+  'Digit3': 10 / 9,
   'Digit4': 7 / 4,
   'Digit5': 9 / 8,
   'KeyZ': 1 / 2,
   'KeyX': 1 / 3,
-  'KeyC': 5 / 12,
+  'KeyC': 9 / 10,
   'KeyV': 4 / 7,
   'KeyB': 8 / 9,
   'KeyQ': 3 / 2,

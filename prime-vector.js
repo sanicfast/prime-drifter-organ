@@ -59,12 +59,12 @@ function foldToAudible(freq) {
 const MOVES_BIG = {
   'Digit1': { ratio: '2:1', vector: new PrimeVector(1, 0, 0, 0) },
   'Digit2': { ratio: '3:1', vector: new PrimeVector(0, 1, 0, 0) },
-  'Digit3': { ratio: '12:5', vector: new PrimeVector(2, 1, -1, 0) },
+  'Digit3': { ratio: '10:9', vector: new PrimeVector(1, -2, 1, 0) },
   'Digit4': { ratio: '7:4', vector: new PrimeVector(-2, 0, 0, 1) },
   'Digit5': { ratio: '9:8', vector: new PrimeVector(-3, 2, 0, 0) },
   'KeyZ': { ratio: '1:2', vector: new PrimeVector(-1, 0, 0, 0) },
   'KeyX': { ratio: '1:3', vector: new PrimeVector(0, -1, 0, 0) },
-  'KeyC': { ratio: '5:12', vector: new PrimeVector(-2, -1, 1, 0) },
+  'KeyC': { ratio: '9:10', vector: new PrimeVector(-1, 2, -1, 0) },
   'KeyV': { ratio: '4:7', vector: new PrimeVector(2, 0, 0, -1) },
   'KeyB': { ratio: '8:9', vector: new PrimeVector(3, -2, 0, 0) },
 };

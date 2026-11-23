@@ -37,7 +37,7 @@ Tech stack: vanilla HTML / CSS / JS, Web Audio API, Canvas for visualization. No
 **Goal:** Keyboard moves the root around frequency space.
 
 - Map keys:
-  - Number row `12345` → big moves up (2:1, 3:1, 4:1, 7:4, 5:2)
+  - Number row `12345` → big moves up (2:1, 3:1, 10:9, 7:4, 9:8)
   - Bottom row `zxcvb` → big moves down (reciprocals)
   - Top row `qwert` → small moves up (3:2, 4:3, 5:4, 6:5, 7:5)
   - Home row `asdfg` → small moves down (reciprocals)
