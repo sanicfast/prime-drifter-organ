@@ -604,6 +604,24 @@ function highlightKey(code, on) {
   if (el) el.classList.toggle('active', on);
 }
 
+// === Help Overlay ===
+
+const overlayEl = document.getElementById('overlay');
+const helpBtn = document.getElementById('help-btn');
+const overlayCloseBtn = document.getElementById('overlay-close');
+
+function toggleOverlay(force) {
+  const show = typeof force === 'boolean' ? force : overlayEl.classList.contains('hidden');
+  overlayEl.classList.toggle('hidden', !show);
+  helpBtn.classList.toggle('active', show);
+}
+
+helpBtn.addEventListener('click', () => toggleOverlay());
+overlayCloseBtn.addEventListener('click', () => toggleOverlay(false));
+overlayEl.addEventListener('click', (e) => {
+  if (e.target === overlayEl) toggleOverlay(false); // backdrop click
+});
+
 // === Undo / Redo ===
 
 function pushUndo(delta, description) {
@@ -646,6 +664,12 @@ function clearVoicing() {
 
 function handleKeyDown(e) {
   if (e.repeat) return;
+
+  if (e.code === 'Escape') {
+    e.preventDefault();
+    toggleOverlay(false);
+    return;
+  }
 
   if (e.code === 'Space') {
     e.preventDefault();
@@ -761,9 +785,13 @@ function handleKeyDown(e) {
     return;
   }
 
-  // Hold/perform mode toggle
+  // Hold/perform mode toggle (/); ? opens the field guide
   if (e.code === 'Slash') {
     e.preventDefault();
+    if (e.key === '?') {
+      toggleOverlay();
+      return;
+    }
     toggleHold();
     return;
   }

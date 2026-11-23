@@ -356,3 +356,126 @@ kbd {
   z-index: 10;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
 }
+
+/* Help Overlay */
+
+.help-btn {
+  position: fixed;
+  top: 14px;
+  right: 16px;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #161625;
+  border: 1px solid #4a4a6a;
+  color: #c8c8e0;
+  font-family: inherit;
+  font-size: 1rem;
+  cursor: pointer;
+  z-index: 50;
+}
+
+.help-btn:hover,
+.help-btn.active {
+  border-color: #7fdbca;
+  color: #7fdbca;
+}
+
+/* help button lives at the top edge — drop its tooltip below, hugging the right */
+.help-btn[data-tip]:hover::after {
+  top: calc(100% + 6px);
+  bottom: auto;
+  left: auto;
+  right: 0;
+  transform: none;
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 10, 20, 0.92);
+  overflow-y: auto;
+  z-index: 100;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 3rem 1.5rem;
+}
+
+.overlay.hidden {
+  display: none;
+}
+
+.overlay-panel {
+  max-width: 860px;
+  width: 100%;
+  background: #141422;
+  border: 1px solid #2a2a3e;
+  border-radius: 8px;
+  padding: 2rem 2.5rem 2.5rem;
+  text-align: left;
+  position: relative;
+}
+
+.overlay-panel h2 {
+  font-size: 1.1rem;
+  font-weight: normal;
+  letter-spacing: 0.1em;
+  color: #c0d8ff;
+  margin-bottom: 1.5rem;
+}
+
+.overlay-close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: none;
+  border: 1px solid #4a4a6a;
+  border-radius: 4px;
+  color: #888;
+  font-family: inherit;
+  font-size: 0.7rem;
+  padding: 3px 8px;
+  cursor: pointer;
+}
+
+.overlay-close:hover {
+  color: #7fdbca;
+  border-color: #7fdbca;
+}
+
+.guide-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.4rem 2.5rem;
+}
+
+.guide-grid h3 {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: #7fdbca;
+  margin-bottom: 0.5rem;
+}
+
+.guide-grid p {
+  font-size: 0.78rem;
+  line-height: 1.65;
+  color: #b8b8cc;
+  margin-bottom: 0.6rem;
+}
+
+.guide-grid p:last-child {
+  margin-bottom: 0;
+}
+
+.guide-grid kbd {
+  font-size: 0.68rem;
+  padding: 1px 5px;
+}
+
+@media (max-width: 700px) {
+  .guide-grid {
+    grid-template-columns: 1fr;
+  }
+}
