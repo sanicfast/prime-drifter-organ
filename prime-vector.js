@@ -36,17 +36,6 @@ class PrimeVector {
       * Math.pow(7, this.exp[3]);
   }
 
-  toFractionString() {
-    const primes = [2, 3, 5, 7];
-    let num = 1, den = 1;
-    for (let i = 0; i < 4; i++) {
-      if (this.exp[i] >= 0) num *= Math.pow(primes[i], this.exp[i]);
-      else den *= Math.pow(primes[i], -this.exp[i]);
-    }
-    if (den === 1) return `${num}`;
-    return `${num}/${den}`;
-  }
-
   toString() {
     return `[${this.exp.join(', ')}]`;
   }

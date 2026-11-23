@@ -25,7 +25,6 @@ Tech stack: vanilla HTML / CSS / JS, Web Audio API, Canvas for visualization. No
 - Define `PrimeVector` class: `[exp2, exp3, exp5, exp7]`
 - Arithmetic: add vectors, negate, compare
 - Convert to frequency: `baseHz * 2^(a) * 3^(b) * 5^(c) * 7^(d)`
-- Convert to reduced fraction string (numerator/denominator using prime factorization)
 - Define all movement vectors as named constants
 - `0` key resets to `[0, 0, 0, 0]`
 
@@ -43,7 +42,7 @@ Tech stack: vanilla HTML / CSS / JS, Web Audio API, Canvas for visualization. No
   - Top row `qwert` → small moves up (3:2, 4:3, 5:4, 6:5, 7:5)
   - Home row `asdfg` → small moves down (reciprocals)
 - Each keypress updates the prime vector
-- Display current Hz and reduced fraction on screen
+- Display current Hz on screen
 - Tone follows the root frequency in real time
 
 **Test:** Navigate around. Fraction display makes sense. 12345 raises pitch, zxcvb lowers it.
@@ -158,7 +157,6 @@ Tech stack: vanilla HTML / CSS / JS, Web Audio API, Canvas for visualization. No
 - Plot history trail (fading path of recent positions)
 - Current position highlighted
 - Log-scale Hz history graph below or beside lattice
-- Show current reduced fraction as text
 
 **Test:** Navigate around — lattice trail follows. 7-exponent shifts color. Graph shows Hz over time in log scale.
 

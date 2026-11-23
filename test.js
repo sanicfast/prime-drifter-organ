@@ -160,14 +160,6 @@ for (const f of [33, 123.4, 567, 999, 3210]) {
     `${f} -> ${folded} out of range`);
 }
 
-// === Test Suite: Fraction String ===
-
-assert('fraction: root', ZERO.toFractionString() === '1');
-assert('fraction: octave', new PrimeVector(1, 0, 0, 0).toFractionString() === '2');
-assert('fraction: fifth', new PrimeVector(-1, 1, 0, 0).toFractionString() === '3/2');
-assert('fraction: major 3rd', new PrimeVector(-2, 0, 1, 0).toFractionString() === '5/4');
-assert('fraction: 6:5', new PrimeVector(1, 1, -1, 0).toFractionString() === '6/5');
-
 // === Render Results ===
 
 const resultsEl = document.getElementById('results');

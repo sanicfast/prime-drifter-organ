@@ -4,16 +4,22 @@
 
 const BASE_HZ = 220;
 const VOLUME = 0.3;
+const HUM_VOLUME = 0.05;
+const HUM_FADE = 0.4;
+const QUICK_FADE = 0.01; // fast dip to silence before re-attacking, kills click from hard stops
+const VOICE_FADE = 0.06; // crossfade time for voices joining/leaving a held chord
 
 let audioCtx = null;
 let masterGain = null;
 let noiseBuffer = null;
 let voices = []; // active voice group (array of voice objects)
+let releasing = new Set(); // voice groups still fading out from a previous note
 let isSounding = false;
 let currentVector = new PrimeVector(0, 0, 0, 0);
 let lastMove = null;
 let activeChord = null; // key code of active chord preset, or null
 let activeAdditives = new Set(); // set of key codes for active additive ratios
+let humNodes = null; // tonic hum voice { oscs, gains }, or null when off
 
 // === Undo / Redo ===
 
@@ -35,6 +41,7 @@ const hzDisplay = document.getElementById('hz-display');
 const stateDisplay = document.getElementById('state-display');
 const moveDisplay = document.getElementById('move-display');
 const chordDisplay = document.getElementById('chord-display');
+const humIndicator = document.getElementById('hum-indicator');
 const vecEls = [
   document.getElementById('vec-0'),
   document.getElementById('vec-1'),
@@ -84,9 +91,15 @@ function getAudibleFreq() {
   return foldToAudible(currentVector.toFrequency(BASE_HZ));
 }
 
-function createVoice(freq) {
+function createVoice(freq, key) {
   const now = audioCtx.currentTime;
   const nodes = [];
+
+  // Per-voice gain: lets a single voice fade in/out while the note is held
+  const voiceGain = audioCtx.createGain();
+  voiceGain.gain.value = 1;
+  voiceGain.connect(masterGain);
+  nodes.push(voiceGain);
 
   // Fundamental
   const osc1 = audioCtx.createOscillator();
@@ -95,7 +108,7 @@ function createVoice(freq) {
   const gain1 = audioCtx.createGain();
   gain1.gain.value = 1.0;
   osc1.connect(gain1);
-  gain1.connect(masterGain);
+  gain1.connect(voiceGain);
   osc1.start();
   nodes.push(osc1, gain1);
 
@@ -106,7 +119,7 @@ function createVoice(freq) {
   const gain2 = audioCtx.createGain();
   gain2.gain.value = 0.12;
   osc2.connect(gain2);
-  gain2.connect(masterGain);
+  gain2.connect(voiceGain);
   osc2.start();
   nodes.push(osc2, gain2);
 
@@ -122,7 +135,7 @@ function createVoice(freq) {
   noiseGain.gain.value = 0.04;
   noiseSrc.connect(bpFilter);
   bpFilter.connect(noiseGain);
-  noiseGain.connect(masterGain);
+  noiseGain.connect(voiceGain);
   noiseSrc.start();
   nodes.push(noiseSrc, bpFilter, noiseGain);
 
@@ -138,12 +151,12 @@ function createVoice(freq) {
   chiffGain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
   chiffSrc.connect(chiffFilter);
   chiffFilter.connect(chiffGain);
-  chiffGain.connect(masterGain);
+  chiffGain.connect(voiceGain);
   chiffSrc.start();
   chiffSrc.stop(now + 0.08);
   nodes.push(chiffSrc, chiffFilter, chiffGain);
 
-  return { oscs: [osc1, osc2], extra: [noiseSrc, chiffSrc], nodes, freq };
+  return { oscs: [osc1, osc2], extra: [noiseSrc, chiffSrc], nodes, voiceGain, freq, key };
 }
 
 function destroyVoice(v) {
@@ -152,11 +165,37 @@ function destroyVoice(v) {
   }
 }
 
+function stopVoicesAt(voiceList, when) {
+  // Hard-stop voices on the audio clock at `when` (they must be silent by
+  // then — stopping an audible oscillator clicks). setTimeout only handles
+  // disconnecting nodes that are already silent.
+  releasing.add(voiceList);
+  for (const v of voiceList) {
+    for (const node of [...v.oscs, ...v.extra]) {
+      try { node.stop(when); } catch(e) {}
+    }
+  }
+  const ms = Math.max(0, (when - audioCtx.currentTime) * 1000) + 50;
+  setTimeout(() => {
+    for (const v of voiceList) destroyVoice(v);
+    releasing.delete(voiceList);
+  }, ms);
+}
+
+function releaseVoices(voiceList, fadeTime) {
+  const now = audioCtx.currentTime;
+  const g = masterGain.gain;
+  g.cancelScheduledValues(now);
+  g.setValueAtTime(g.value, now);
+  g.linearRampToValueAtTime(0, now + fadeTime);
+  stopVoicesAt(voiceList, now + fadeTime);
+}
+
 function vectorKey(v) {
   return v.exp.join(',');
 }
 
-function getChordFrequencies() {
+function getChordVoicing() {
   const rootFreq = getAudibleFreq();
   const rootVec = new PrimeVector(0, 0, 0, 0);
 
@@ -191,26 +230,41 @@ function getChordFrequencies() {
     }
   }
 
-  return voiceVectors.map(v => rootFreq * v.toFrequency(1));
+  return voiceVectors.map(v => ({
+    key: vectorKey(v),
+    freq: rootFreq * v.toFrequency(1),
+  }));
 }
 
 function startTone() {
   if (isSounding) return;
   initAudio();
 
-  const freqs = getChordFrequencies();
-  const voiceCount = freqs.length;
-  const perVoiceVolume = VOLUME / voiceCount;
+  const voicing = getChordVoicing();
+  const perVoiceVolume = VOLUME / voicing.length;
 
-  voices = freqs.map(f => createVoice(f));
-
-  // ADSR on master gain
   const now = audioCtx.currentTime;
   const g = masterGain.gain;
+
+  // Steal any voices still fading out from a previous note: ramping the
+  // shared master gain back up would make them audible again until their
+  // scheduled stop — a hard stop at audible gain clicks.
+  if (voices.length > 0) releasing.add(voices);
+  voices = [];
+  for (const fading of [...releasing]) {
+    stopVoicesAt(fading, now + QUICK_FADE);
+  }
+
+  // ADSR on master gain: quick dip to silence (kills any stolen voices),
+  // then attack/decay from the current gain value — never a hard jump.
   g.cancelScheduledValues(now);
-  g.setValueAtTime(0, now);
-  g.linearRampToValueAtTime(perVoiceVolume, now + envelope.attack);
-  g.linearRampToValueAtTime(perVoiceVolume * envelope.sustain, now + envelope.attack + envelope.decay);
+  g.setValueAtTime(g.value, now);
+  g.linearRampToValueAtTime(0, now + QUICK_FADE);
+  g.linearRampToValueAtTime(perVoiceVolume, now + QUICK_FADE + envelope.attack);
+  g.linearRampToValueAtTime(perVoiceVolume * envelope.sustain,
+    now + QUICK_FADE + envelope.attack + envelope.decay);
+
+  voices = voicing.map(s => createVoice(s.freq, s.key));
 
   isSounding = true;
   stateDisplay.textContent = 'sounding';
@@ -220,23 +274,7 @@ function startTone() {
 function stopTone() {
   if (!isSounding) return;
 
-  const now = audioCtx.currentTime;
-  const g = masterGain.gain;
-
-  g.cancelScheduledValues(now);
-  g.setValueAtTime(g.value, now);
-  g.linearRampToValueAtTime(0, now + envelope.release);
-
-  const oldVoices = voices;
-  const releaseTime = envelope.release;
-  setTimeout(() => {
-    for (const v of oldVoices) {
-      for (const osc of v.oscs) { try { osc.stop(); } catch(e) {} }
-      for (const src of v.extra) { try { src.stop(); } catch(e) {} }
-      destroyVoice(v);
-    }
-  }, releaseTime * 1000 + 50);
-
+  releaseVoices(voices, envelope.release);
   voices = [];
   isSounding = false;
   stateDisplay.textContent = 'idle';
@@ -244,28 +282,125 @@ function stopTone() {
 }
 
 function updateFrequencyIfSounding() {
-  if (!isSounding || voices.length === 0) return;
+  if (!isSounding) return;
 
-  const freqs = getChordFrequencies();
+  const voicing = getChordVoicing();
+  const now = audioCtx.currentTime;
+  const want = new Map(voicing.map(s => [s.key, s.freq]));
 
-  // If voice count changed (chord switched while sounding), restart
-  if (freqs.length !== voices.length) {
-    stopTone();
-    startTone();
-    return;
+  // Diff voices by prime vector, not by hz: shared ratios keep sounding
+  // untouched (no re-attack, no click); only changed voices crossfade.
+  const kept = [];
+  const dying = [];
+  for (const v of voices) {
+    if (want.has(v.key)) kept.push({ voice: v, freq: want.get(v.key) });
+    else dying.push(v);
   }
 
-  const now = audioCtx.currentTime;
-  for (let i = 0; i < voices.length; i++) {
-    const freq = freqs[i];
-    voices[i].oscs[0].frequency.setTargetAtTime(freq, now, 0.02);
-    voices[i].oscs[1].frequency.setTargetAtTime(freq * 2, now, 0.02);
-    voices[i].nodes.forEach(n => {
+  for (const v of dying) {
+    const vg = v.voiceGain.gain;
+    vg.cancelScheduledValues(now);
+    vg.setValueAtTime(vg.value, now);
+    vg.linearRampToValueAtTime(0, now + VOICE_FADE);
+  }
+  if (dying.length > 0) stopVoicesAt(dying, now + VOICE_FADE);
+
+  const haveKeys = new Set(kept.map(k => k.voice.key));
+  const added = [];
+  for (const s of voicing) {
+    if (haveKeys.has(s.key)) continue;
+    const v = createVoice(s.freq, s.key);
+    const vg = v.voiceGain.gain;
+    vg.setValueAtTime(0, now);
+    vg.linearRampToValueAtTime(1, now + Math.max(envelope.attack, VOICE_FADE));
+    added.push({ voice: v, freq: s.freq });
+  }
+
+  voices = kept.concat(added).map(k => k.voice);
+
+  // Keep total loudness steady as the voice count changes
+  if (dying.length > 0 || added.length > 0) {
+    const level = (VOLUME / voices.length) * envelope.sustain;
+    const g = masterGain.gain;
+    g.cancelScheduledValues(now);
+    g.setValueAtTime(g.value, now);
+    g.linearRampToValueAtTime(level, now + VOICE_FADE);
+  }
+
+  // Glide to target frequencies (no-op for voices whose freq didn't change)
+  for (const { voice: v, freq } of kept.concat(added)) {
+    v.oscs[0].frequency.setTargetAtTime(freq, now, 0.02);
+    v.oscs[1].frequency.setTargetAtTime(freq * 2, now, 0.02);
+    v.nodes.forEach(n => {
       if (n instanceof BiquadFilterNode && n.type === 'bandpass') {
         n.frequency.setTargetAtTime(freq, now, 0.02);
       }
     });
+    v.freq = freq;
   }
+}
+
+// === Tonic Hum ===
+
+function startHum() {
+  if (humNodes) return;
+  initAudio();
+
+  const freq = foldToAudible(BASE_HZ);
+  const now = audioCtx.currentTime;
+
+  // Independent chain: never touches masterGain, so it's unaffected by the note envelope
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(0, now);
+  gain.gain.linearRampToValueAtTime(HUM_VOLUME, now + HUM_FADE);
+  gain.connect(audioCtx.destination);
+
+  const osc = audioCtx.createOscillator();
+  osc.type = 'sine';
+  osc.frequency.value = freq;
+  osc.connect(gain);
+  osc.start();
+
+  // Subtle octave partial for a little body, like the main voice
+  const osc2 = audioCtx.createOscillator();
+  osc2.type = 'sine';
+  osc2.frequency.value = freq * 2;
+  const gain2 = audioCtx.createGain();
+  gain2.gain.value = 0.12;
+  osc2.connect(gain2);
+  gain2.connect(gain);
+  osc2.start();
+
+  humNodes = { oscs: [osc, osc2], gains: [gain, gain2] };
+  setHumActive(true);
+}
+
+function stopHum() {
+  if (!humNodes) return;
+
+  const now = audioCtx.currentTime;
+  const g = humNodes.gains[0].gain;
+  g.cancelScheduledValues(now);
+  g.setValueAtTime(g.value, now);
+  g.linearRampToValueAtTime(0, now + HUM_FADE);
+
+  const dying = humNodes;
+  humNodes = null;
+  for (const osc of dying.oscs) { try { osc.stop(now + HUM_FADE + 0.01); } catch(e) {} }
+  setTimeout(() => {
+    for (const node of dying.gains) { try { node.disconnect(); } catch(e) {} }
+  }, HUM_FADE * 1000 + 60);
+
+  setHumActive(false);
+}
+
+function toggleHum() {
+  if (humNodes) stopHum(); else startHum();
+}
+
+function setHumActive(on) {
+  humIndicator.classList.toggle('active', on);
+  highlightKey('Period', on);
 }
 
 // === Display ===
@@ -329,7 +464,7 @@ function redo() {
 
 // === Keyboard Input ===
 
-document.addEventListener('keydown', (e) => {
+function handleKeyDown(e) {
   if (e.repeat) return;
 
   if (e.code === 'Space') {
@@ -425,6 +560,13 @@ document.addEventListener('keydown', (e) => {
     return;
   }
 
+  // Tonic hum toggle
+  if (e.code === 'Period') {
+    e.preventDefault();
+    toggleHum();
+    return;
+  }
+
   // Movement keys
   const move = ALL_MOVES[e.code];
   if (move) {
@@ -436,18 +578,47 @@ document.addEventListener('keydown', (e) => {
     updateDisplay(move.ratio);
     updateFrequencyIfSounding();
   }
-});
+}
 
-document.addEventListener('keyup', (e) => {
-  // Don't un-highlight toggle keys (chords and additives stay lit)
-  if (!CHORD_PRESETS[e.code] && !ADDITIVE_RATIOS[e.code]) {
+function handleKeyUp(e) {
+  // Don't un-highlight toggle keys (chords, additives, hum stay lit)
+  if (!CHORD_PRESETS[e.code] && !ADDITIVE_RATIOS[e.code] && e.code !== 'Period') {
     highlightKey(e.code, false);
   }
 
   if (e.code === 'Space') {
     stopTone();
   }
+}
+
+document.addEventListener('keydown', handleKeyDown);
+document.addEventListener('keyup', handleKeyUp);
+
+// === Mouse Input (clicks on cheatsheet keys) ===
+
+let mouseDownKey = null; // data-key of the legend key currently held via pointer
+
+function fakeKeyEvent(code) {
+  return { code, repeat: false, preventDefault() {} };
+}
+
+function releaseMouseKey() {
+  if (!mouseDownKey) return;
+  handleKeyUp(fakeKeyEvent(mouseDownKey));
+  mouseDownKey = null;
+}
+
+document.addEventListener('pointerdown', (e) => {
+  if (e.button !== 0) return;
+  const keyEl = e.target.closest('.cheat-key[data-key]');
+  if (!keyEl) return;
+  e.preventDefault(); // no text selection while clicking keys
+  mouseDownKey = keyEl.dataset.key;
+  handleKeyDown(fakeKeyEvent(mouseDownKey));
 });
+
+document.addEventListener('pointerup', releaseMouseKey);
+document.addEventListener('pointercancel', releaseMouseKey);
 
 // === Init ===
 

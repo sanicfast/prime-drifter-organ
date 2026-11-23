@@ -121,6 +121,20 @@ h1 {
   color: #7fdbca;
 }
 
+.hum-indicator {
+  font-size: 0.7rem;
+  color: #3a3a4e;
+  border: 1px solid #2a2a3e;
+  border-radius: 10px;
+  padding: 2px 8px;
+}
+
+.hum-indicator.active {
+  color: #e6b877;
+  border-color: #a07840;
+  box-shadow: 0 0 6px #e6b87744;
+}
+
 .state-hint {
   font-size: 0.75rem;
   color: #666;
@@ -291,6 +305,11 @@ kbd {
   gap: 0.25rem;
 }
 
+.cheat-key[data-key] {
+  cursor: pointer;
+  user-select: none;
+}
+
 .cheat-key kbd {
   font-size: 0.9rem;
   padding: 5px 9px;
@@ -312,4 +331,28 @@ kbd {
 
 .cheat-key.active span {
   color: #7fdbca;
+}
+
+/* Tooltips — appear instantly on hover (native title tooltips have a fixed ~1s delay) */
+
+[data-tip] {
+  position: relative;
+}
+
+[data-tip]:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 8px;
+  background: #1c1c30;
+  border: 1px solid #4a4a6a;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  color: #e0e0f0;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 10;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
 }
