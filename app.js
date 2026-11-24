@@ -11,6 +11,19 @@ const HUM_FADE = 0.4;
 const QUICK_FADE = 0.01; // fast dip to silence before re-attacking, kills click from hard stops
 const VOICE_FADE = 0.06; // crossfade time for voices joining/leaving a held chord
 
+let body = 0.6; // timbre: weight of the upper harmonic stack (0 = airy sine only)
+
+// Upper partials and their mix at full body. These multipliers are the
+// collision points where tuning purity becomes audible: e.g. root ×5 and a
+// true 5:4 third's ×4 both land on 5f — with these partials present, a pure
+// third interferes with itself into stillness, and 81:64 buzzes instead.
+const PARTIAL_MIX = [
+  { mult: 3, mix: 0.12 },
+  { mult: 4, mix: 0.07 },
+  { mult: 5, mix: 0.05 },
+  { mult: 7, mix: 0.04 },
+];
+
 let audioCtx = null;
 let masterGain = null;
 let noiseBuffer = null;
@@ -133,6 +146,23 @@ function getAudibleFreq() {
   return foldToAudible(currentVector.toFrequency(baseHz));
 }
 
+// Adds the upper harmonic stack (×3 ×4 ×5 ×7) to a destination voice chain
+function addHarmonics(freq, dest) {
+  const partials = [];
+  for (const { mult, mix } of PARTIAL_MIX) {
+    const osc = audioCtx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.value = freq * mult;
+    const gain = audioCtx.createGain();
+    gain.gain.value = mix * body;
+    osc.connect(gain);
+    gain.connect(dest);
+    osc.start();
+    partials.push({ osc, gain, mult, mix });
+  }
+  return partials;
+}
+
 function createVoice(freq, key) {
   const now = audioCtx.currentTime;
   const nodes = [];
@@ -164,6 +194,10 @@ function createVoice(freq, key) {
   gain2.connect(voiceGain);
   osc2.start();
   nodes.push(osc2, gain2);
+
+  // Upper harmonic stack (glides with the fundamental, retunes with body)
+  const partials = addHarmonics(freq, voiceGain);
+  for (const p of partials) nodes.push(p.osc, p.gain);
 
   // Breath noise
   const noiseSrc = audioCtx.createBufferSource();
@@ -198,7 +232,11 @@ function createVoice(freq, key) {
   chiffSrc.stop(now + 0.08);
   nodes.push(chiffSrc, chiffFilter, chiffGain);
 
-  return { oscs: [osc1, osc2], extra: [noiseSrc, chiffSrc], nodes, voiceGain, freq, key };
+  return {
+    oscs: [osc1, osc2, ...partials.map(p => p.osc)],
+    extra: [noiseSrc, chiffSrc],
+    nodes, voiceGain, partials, freq, key,
+  };
 }
 
 function destroyVoice(v) {
@@ -382,6 +420,7 @@ function updateFrequencyIfSounding() {
   for (const { voice: v, freq } of kept.concat(added)) {
     v.oscs[0].frequency.setTargetAtTime(freq, now, 0.02);
     v.oscs[1].frequency.setTargetAtTime(freq * 2, now, 0.02);
+    for (const p of v.partials) p.osc.frequency.setTargetAtTime(freq * p.mult, now, 0.02);
     v.nodes.forEach(n => {
       if (n instanceof BiquadFilterNode && n.type === 'bandpass') {
         n.frequency.setTargetAtTime(freq, now, 0.02);
@@ -389,6 +428,32 @@ function updateFrequencyIfSounding() {
     });
     v.freq = freq;
   }
+}
+
+// === Timbre ===
+
+// Live-retune every sounding voice's harmonic stack
+function setBody(value) {
+  body = value;
+  if (!audioCtx) return;
+  const now = audioCtx.currentTime;
+  for (const v of voices) {
+    for (const p of v.partials) p.gain.gain.setTargetAtTime(p.mix * body, now, 0.02);
+  }
+  if (humNodes) {
+    for (const p of humNodes.partials) p.gain.gain.setTargetAtTime(p.mix * body, now, 0.02);
+  }
+}
+
+function setupBodyControl() {
+  const input = document.getElementById('body-ctl');
+  const label = document.getElementById('body-val');
+  label.textContent = parseFloat(input.value).toFixed(2);
+  input.addEventListener('input', () => {
+    const v = parseFloat(input.value);
+    label.textContent = v.toFixed(2);
+    setBody(v);
+  });
 }
 
 // === Tonic Hum ===
@@ -422,7 +487,10 @@ function startHum() {
   gain2.connect(gain);
   osc2.start();
 
-  humNodes = { oscs: [osc, osc2], gains: [gain, gain2] };
+  // The drone gets the harmonic stack too: it becomes a full tuning fork
+  const partials = addHarmonics(freq, gain);
+
+  humNodes = { oscs: [osc, osc2, ...partials.map(p => p.osc)], gains: [gain, gain2], partials };
   setHumActive(true);
 }
 
@@ -461,6 +529,7 @@ function retuneHum() {
   const now = audioCtx.currentTime;
   humNodes.oscs[0].frequency.setTargetAtTime(freq, now, 0.02);
   humNodes.oscs[1].frequency.setTargetAtTime(freq * 2, now, 0.02);
+  for (const p of humNodes.partials) p.osc.frequency.setTargetAtTime(freq * p.mult, now, 0.02);
 }
 
 // === Step Pivot Chord Mode ===
@@ -912,4 +981,5 @@ document.addEventListener('pointercancel', releaseMouseKey);
 
 setupSliders();
 setupRootControl();
+setupBodyControl();
 updateDisplay();

@@ -199,6 +199,16 @@ Tech stack: vanilla HTML / CSS / JS, Web Audio API, Canvas for visualization. No
 
 ---
 
+## Step 19 — Timbre / Body (post-plan addition)
+
+**Goal:** Make the tuning audible, not just true.
+
+- ×3 ×4 ×5 ×7 harmonic partials per voice and on the hum, mixed by a "body" slider (0 = airy sine, default 0.6)
+- The upper partials are where pure intervals collide into stillness and mistunings (like 81:64) buzz — purity becomes gradeable by ear
+- Partials glide with root moves and retune live while notes sound
+
+---
+
 ## Step 13 — Step Pivot Chord Mode
 
 **Goal:** Chords can act as root transposers.

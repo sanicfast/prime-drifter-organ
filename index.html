@@ -61,6 +61,15 @@
     </div>
 
     <div class="envelope">
+      <div class="env-title">timbre</div>
+      <div class="root-row">
+        <input type="range" id="body-ctl" min="0" max="1" step="0.01" value="0.6"
+               data-tip="harmonic stack — 0 is pure airy breath, higher adds the pipe where purity buzzes or locks">
+        <span id="body-val">0.60</span>
+      </div>
+    </div>
+
+    <div class="envelope">
       <div class="env-title">envelope</div>
       <div class="env-controls">
         <div class="env-slider">
@@ -213,6 +222,9 @@
           attack, decay, sustain, release.</p>
           <p>the <b>initial root</b> slider picks where zero lives (55–880 Hz) —
           the hum, the <kbd>0</kbd> key, and undo all follow it home.</p>
+          <p>the <b>body</b> slider opens the pipe's harmonic stack. Low is airy
+          breath; higher is a small reed where pure intervals ring glassy still
+          and mistunings buzz — the partials are what the tuning acts through.</p>
         </section>
 
         <section>
