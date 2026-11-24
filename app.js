@@ -1171,8 +1171,9 @@ const SCORE_SEED = SCORE_HELP + '\n\n' +
   '4.45 space-\n' +
   '4.55 .            # hum off\n';
 
-let scoreEl, pbStatusEl, recBtn, playBtn, stopBtn, pbLoopEl;
+let scoreEl, pbStatusEl, recBtn, playBtn, stopBtn, pbLoopEl, pbRestoreBtn;
 let recEvents = null;    // array of events while recording, else null
+let discardedScore = null; // last score displaced by a recording (one-slot undo)
 let recStartMs = 0;
 let playing = false;
 let playTimers = [];
@@ -1214,14 +1215,25 @@ function stopRecording() {
 }
 
 // Replace the score body with a recording, keeping any leading comment header.
+// A recording of nothing never touches the score; a recording that displaces a
+// non-empty score keeps it one click away via the restore button.
 function writeScore(events) {
+  if (events.length === 0) {
+    setStatus('nothing recorded — score untouched');
+    return;
+  }
+  const previous = scoreEl.value;
   const header = [];
-  for (const line of scoreEl.value.split('\n')) {
+  for (const line of previous.split('\n')) {
     const t = line.trim();
     if (t === '' || t.startsWith('#')) header.push(line);
     else break;
   }
   scoreEl.value = `${header.join('\n').trim() || SCORE_HELP}\n\n${formatScore(events)}`;
+  if (parseScore(previous).events.length > 0) {
+    discardedScore = previous;
+    pbRestoreBtn.hidden = false;
+  }
   saveScore();
 }
 
@@ -1326,15 +1338,26 @@ function setupSessionControls() {
   playBtn = document.getElementById('pb-play');
   stopBtn = document.getElementById('pb-stop');
   pbLoopEl = document.getElementById('pb-loop');
+  pbRestoreBtn = document.getElementById('pb-restore');
 
   let saved = null;
   try { saved = localStorage.getItem(SCORE_STORAGE_KEY); } catch (err) { /* private mode */ }
-  scoreEl.value = saved && saved.trim() ? saved : SCORE_SEED;
+  // Fall back to the example whenever the saved score has nothing playable —
+  // this doubles as the way to bring the example back: clear the editor, reload.
+  scoreEl.value = saved && parseScore(saved).events.length > 0 ? saved : SCORE_SEED;
 
   scoreEl.addEventListener('input', saveScore);
   recBtn.addEventListener('click', () => (recEvents ? stopRecording() : startRecording()));
   playBtn.addEventListener('click', () => (playing ? stopPlayback() : startPlayback()));
   stopBtn.addEventListener('click', () => { stopRecording(); stopPlayback(); });
+  pbRestoreBtn.addEventListener('click', () => {
+    if (discardedScore === null) return;
+    scoreEl.value = discardedScore;
+    discardedScore = null;
+    pbRestoreBtn.hidden = true;
+    saveScore();
+    setStatus('previous score restored');
+  });
 
   // Background tabs throttle timers; don't let a hidden tab avalanche on return.
   document.addEventListener('visibilitychange', () => {

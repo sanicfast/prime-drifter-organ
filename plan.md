@@ -252,6 +252,9 @@ choreography. What the recorder writes is exactly what the player reads.
   pure functions (22 regression tests).
 - **Record**: keystrokes captured with timestamps; stopping writes the
   score into the editor (leading comment headers survive the rewrite).
+  Safety: an empty recording never touches the score; a recording that
+  replaces a non-empty score parks it in a one-slot ↩ restore; clearing
+  the editor and reloading brings the seeded example back.
 - **Play**: re-dispatches recorded events through the real key handlers —
   every mode, glide, and voice-diff subtlety applies to playback exactly as
   to live playing, and live keystrokes can be layered over playback.
