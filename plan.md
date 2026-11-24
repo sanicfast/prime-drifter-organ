@@ -246,10 +246,13 @@ choreography. What the recorder writes is exactly what the player reads.
 
 - **Score format** (text, one event per line): `<time> <key>+` press,
   `<key>-` release, bare `<key>` tap; bare numbers anchor time, `+0.25`
-  advances it; `#` comments. Friendly tokens mirror the keyboard
+  advances it; `#` comments. **`sethz <hz>`** retunes the initial root, so
+  scores can be key-agnostic (`0.00 sethz 264` pins the piece to C4) — and
+  dragging the root slider while recording captures the retune (coalesced).
+  Friendly tokens mirror the keyboard
   (`space`, letters, `;` `'` `,` `.` `/` `del`); digit keys need `+/-`
   since bare digits are times. Parse + format live in prime-vector.js as
-  pure functions (22 regression tests).
+  pure functions (28 regression tests).
 - **Record**: keystrokes captured with timestamps; stopping writes the
   score into the editor (leading comment headers survive the rewrite).
   Safety: an empty recording never touches the score; a recording that

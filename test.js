@@ -230,6 +230,26 @@ assert('score: every code round-trips its token',
     }));
 }
 
+// sethz command: retune the initial root
+{
+  const { events, errors } = parseScore('0.00 sethz 264\n1.0 space+');
+  assert('parse: sethz event', errors.length === 0 &&
+    events.some(e => e.type === 'sethz' && e.hz === 264 && e.t === 0));
+  assert('parse: sethz arg consumed, not eaten as time',
+    events.some(e => e.code === 'Space' && e.down && e.t === 1000));
+}
+{
+  assert('parse: sethz missing arg', parseScore('1.0 sethz').errors.length === 1);
+  assert('parse: sethz bad arg', parseScore('1.0 sethz oops').errors.length === 1);
+  assert('parse: sethz non-positive arg', parseScore('1.0 sethz 0').errors.length === 1);
+}
+{
+  const { events } = parseScore('0.5 sethz 330.5 h');
+  const rt = parseScore(formatScore(events));
+  assert('roundtrip: sethz survives format', rt.errors.length === 0 &&
+    rt.events.length === events.length && rt.events[0].hz === 330.5);
+}
+
 // === Render Results ===
 
 const resultsEl = document.getElementById('results');

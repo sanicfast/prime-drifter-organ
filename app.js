@@ -99,6 +99,11 @@ function rootHzFromSlider(t) {
   return ROOT_HZ_LOW * Math.pow(2, t * Math.log2(ROOT_HZ_HIGH / ROOT_HZ_LOW));
 }
 
+function sliderTForHz(hz) {
+  const t = Math.log2(hz / ROOT_HZ_LOW) / Math.log2(ROOT_HZ_HIGH / ROOT_HZ_LOW);
+  return Math.min(1, Math.max(0, t)); // display clamps; baseHz itself may exceed the slider
+}
+
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']; // index = midi % 12
 
 // Nearest equal-tempered note — a courtesy label (≈), not a promise
@@ -108,20 +113,28 @@ function approxNoteName(hz) {
   return `${name}${Math.floor(midi / 12) - 1}`;
 }
 
+let rootSliderEl, rootLabelEl;
+
+// The instrument's anchor, set from anywhere: slider, score `sethz`, ...
+// A setting, not a move: no undo entry, same as dragging the slider.
+function setBaseHz(hz) {
+  baseHz = Math.min(8000, Math.max(1, hz)); // sanity guard; folding handles the audible rest
+  rootSliderEl.value = sliderTForHz(baseHz);
+  rootLabelEl.textContent = `${baseHz.toFixed(1)} Hz ≈ ${approxNoteName(baseHz)}`;
+  updateDisplay();
+  updateFrequencyIfSounding(); // glides a held chord
+  retuneHum();
+}
+
 function setupRootControl() {
-  const input = document.getElementById('base-hz');
-  const label = document.getElementById('base-hz-val');
+  rootSliderEl = document.getElementById('base-hz');
+  rootLabelEl = document.getElementById('base-hz-val');
 
-  const update = () => {
-    baseHz = rootHzFromSlider(parseFloat(input.value));
-    label.textContent = `${baseHz.toFixed(1)} Hz ≈ ${approxNoteName(baseHz)}`;
-    updateDisplay();
-    updateFrequencyIfSounding(); // glides a held chord
-    retuneHum();
-  };
-
-  input.addEventListener('input', update);
-  update();
+  rootSliderEl.addEventListener('input', () => {
+    setBaseHz(rootHzFromSlider(parseFloat(rootSliderEl.value)));
+    recordBaseHz(false);
+  });
+  setBaseHz(rootHzFromSlider(parseFloat(rootSliderEl.value)));
 }
 
 // === Audio ===
@@ -1154,11 +1167,12 @@ document.addEventListener('pointercancel', releaseMouseKey);
 const SCORE_STORAGE_KEY = 'prime-drifter-score';
 
 const SCORE_HELP = '# score: bare number sets the time in seconds, "+0.25" advances it\n' +
-  '# <key>+ press · <key>- release · bare <key> quick tap · # comment\n' +
+  '# <key>+ press · <key>- release · bare <key> quick tap · sethz <hz> moves the initial root · # comment\n' +
   '# keys: space 0-5 letters ; \' , . / \\ del  (digit keys always need + or -)';
 
 const SCORE_SEED = SCORE_HELP + '\n\n' +
   '# "Somewhere, over the rainbow" — the opening, anchored on do\n' +
+  '0.00 sethz 264    # pin the key to C4, whatever the slider says\n' +
   '0.00 .            # hum on: the drone is the tonic\n' +
   '0.00 space+\n' +
   '0.55 1+           # "Some—where" — that octave, gliding\n' +
@@ -1174,6 +1188,7 @@ const SCORE_SEED = SCORE_HELP + '\n\n' +
 let scoreEl, pbStatusEl, recBtn, playBtn, stopBtn, pbLoopEl, pbRestoreBtn, pbResetEl;
 let recEvents = null;    // array of events while recording, else null
 let discardedScore = null; // last score displaced by a recording (one-slot undo)
+let lastRecHz = null;      // coalescing tracker for recorded slider moves
 let recStartMs = 0;
 let playing = false;
 let playTimers = [];
@@ -1196,16 +1211,28 @@ function recordKeyEvent(e, down) {
   recEvents.push({ t: Math.round(performance.now() - recStartMs), code: e.code, down });
 }
 
+// Slider moves are captured too (coalesced): a recording that retunes the
+// instrument replays the retune. forced=true flushes the exact final value.
+function recordBaseHz(forced) {
+  if (!recEvents || playing) return;
+  if (!forced && lastRecHz !== null && Math.abs(baseHz - lastRecHz) / lastRecHz < 0.005) return;
+  if (lastRecHz !== null && Math.abs(baseHz - lastRecHz) < 1e-9) return;
+  lastRecHz = baseHz;
+  recEvents.push({ t: Math.round(performance.now() - recStartMs), type: 'sethz', hz: baseHz });
+}
+
 function startRecording() {
   stopPlayback();
   recStartMs = performance.now();
   recEvents = [];
+  lastRecHz = null;
   recBtn.classList.add('recording');
   recBtn.textContent = '■ stop';
 }
 
 function stopRecording() {
   if (!recEvents) return;
+  recordBaseHz(true); // exact final slider position
   const events = recEvents;
   recEvents = null;
   recBtn.classList.remove('recording');
@@ -1284,6 +1311,10 @@ function startPlayback() {
 
 function dispatchScoreEvent(ev) {
   playNowMs = ev.t;
+  if (ev.type === 'sethz') {
+    setBaseHz(ev.hz);
+    return;
+  }
   if (ev.down) {
     pressedCodes.add(ev.code);
     handleKeyDown(fakeKey(ev.code));

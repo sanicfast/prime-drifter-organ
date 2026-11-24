@@ -185,6 +185,7 @@ const VOICE_LABELS = {
 //
 // Line format:  <time> <token><+|->        time: seconds, or +delta
 //               bare token = quick tap (press + release)
+//               <time> sethz <hz>  move the initial root
 //               '#' anywhere on a line starts a comment
 //
 //   0.00 space+ 0        hold space, snap home
@@ -243,7 +244,17 @@ function parseScore(text) {
   for (let i = 0; i < lines.length; i++) {
     const lineNo = i + 1;
     const tokens = lines[i].split('#')[0].trim().split(/\s+/).filter(Boolean);
-    for (const tok of tokens) {
+    for (let ti = 0; ti < tokens.length; ti++) {
+      const tok = tokens[ti];
+      if (tok === 'sethz') {
+        const hz = parseFloat(tokens[++ti]);
+        if (!Number.isFinite(hz) || hz <= 0) {
+          errors.push({ line: lineNo, msg: 'sethz needs a positive hz argument' });
+          continue;
+        }
+        events.push({ t: curT, type: 'sethz', hz, line: lineNo });
+        continue;
+      }
       if (/^\d+(\.\d+)?$/.test(tok) || /^\.\d+$/.test(tok)) {
         curT = Math.round(parseFloat(tok) * 1000);
         continue;
@@ -277,7 +288,11 @@ function parseScore(text) {
 
 function formatScore(events) {
   return events
-    .map(ev => `${(ev.t / 1000).toFixed(2)} ${scoreTokenFor(ev.code)}${ev.down ? '+' : '-'}`)
+    .map(ev => {
+      const t = (ev.t / 1000).toFixed(2);
+      if (ev.type === 'sethz') return `${t} sethz ${+ev.hz.toFixed(3)}`; // + trims zeros
+      return `${t} ${scoreTokenFor(ev.code)}${ev.down ? '+' : '-'}`;
+    })
     .join('\n');
 }
 
