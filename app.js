@@ -9,6 +9,8 @@ const VOLUME = 0.3;
 const HUM_VOLUME = 0.05;
 const HUM_FADE = 0.4;
 const VOICE_FADE = 0.06; // crossfade time for voices joining/leaving a held chord
+const TAIL_TRIM = 0.05;  // exponential fade used to trim over-budget tails
+const TAIL_BUDGET = 0.55; // summed note-gain ceiling before the mix strains
 
 let body = 0.6; // timbre: weight of the upper harmonic stack (0 = airy sine only)
 
@@ -28,6 +30,7 @@ let masterGain = null; // static mix bus — note envelopes never touch it
 let noiseBuffer = null;
 let voices = []; // active voice group (array of voice objects)
 let noteGain = null; // gain node of the current note — its envelope is its own
+let noteGroups = []; // {gain, voices} of current + still-ringing notes (tail budget)
 let releasing = new Set(); // voice groups still fading out from a previous note
 let isSounding = false;
 let currentVector = new PrimeVector(0, 0, 0, 0);
@@ -144,7 +147,17 @@ function initAudio() {
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   masterGain = audioCtx.createGain();
   masterGain.gain.value = 1; // static: each note rides its own gain node
-  masterGain.connect(audioCtx.destination);
+
+  // Gentle safety limiter: overlapping tails + hum + a full harmonic stack
+  // can sum past 1.0 on fast playing; soft-clip that instead of hard-crunching.
+  const limiter = audioCtx.createDynamicsCompressor();
+  limiter.threshold.value = -6;
+  limiter.knee.value = 8;
+  limiter.ratio.value = 4;
+  limiter.attack.value = 0.004;
+  limiter.release.value = 0.18;
+  masterGain.connect(limiter);
+  limiter.connect(audioCtx.destination);
 
   const duration = 2;
   const bufferSize = audioCtx.sampleRate * duration;
@@ -350,6 +363,30 @@ function startTone() {
 
   const now = audioCtx.currentTime;
 
+  // Tail budget: release tails may ring and overlap freely — that's the
+  // organ breathing — until the SUM of note gains would push the mix past
+  // headroom (fast spam stacking clips). Then the OLDEST tails are trimmed
+  // with a fast exponential fade: click-free from any level, unlike the
+  // old 10ms linear slam that popped. Relaxed playing never hits this.
+  let sum = perVoiceVolume; // the incoming note
+  const keepers = [];
+  for (let i = noteGroups.length - 1; i >= 0; i--) { // newest tails matter most
+    const gr = noteGroups[i];
+    const tg = gr.gain.gain;
+    const lvl = tg.value;
+    if (lvl <= 0.01) continue; // effectively silent: drop, let it self-expire
+    if (sum + lvl > TAIL_BUDGET) {
+      tg.cancelScheduledValues(now);
+      tg.setValueAtTime(Math.max(lvl, 1e-4), now);
+      tg.exponentialRampToValueAtTime(1e-4, now + TAIL_TRIM);
+      stopVoicesAt(gr.voices, now + TAIL_TRIM + 0.01, [gr.gain]);
+      continue;
+    }
+    sum += lvl;
+    keepers.push(gr);
+  }
+  keepers.reverse();
+
   // Each note gets its own gain node: attacks and releases are private, so
   // a re-attack never steals from — or clicks through — a note still fading.
   noteGain = audioCtx.createGain();
@@ -361,6 +398,8 @@ function startTone() {
     now + envelope.attack + envelope.decay);
 
   voices = voicing.map(s => createVoice(s.freq, s.key, noteGain));
+  noteGroups = keepers;
+  noteGroups.push({ gain: noteGain, voices });
 
   isSounding = true;
   stateDisplay.textContent = 'sounding';
@@ -414,6 +453,10 @@ function updateFrequencyIfSounding() {
   }
 
   voices = kept.concat(added).map(k => k.voice);
+
+  // keep the tail-budget registry's view of this note current
+  const group = noteGroups[noteGroups.length - 1];
+  if (group && group.gain === noteGain) group.voices = voices;
 
   // Keep total loudness steady as the voice count changes
   if (dying.length > 0 || added.length > 0) {
@@ -473,11 +516,13 @@ function startHum() {
   const freq = foldToAudible(baseHz);
   const now = audioCtx.currentTime;
 
-  // Independent chain: never touches masterGain, so it's unaffected by the note envelope
+  // masterGain is a static bus now, so the hum rides it safely: its own
+  // gain node keeps it independent of the note envelopes, and the shared
+  // output limiter catches hum + notes together.
   const gain = audioCtx.createGain();
   gain.gain.setValueAtTime(0, now);
   gain.gain.linearRampToValueAtTime(HUM_VOLUME, now + HUM_FADE);
-  gain.connect(audioCtx.destination);
+  gain.connect(masterGain);
 
   const osc = audioCtx.createOscillator();
   osc.type = 'sine';
@@ -1444,6 +1489,6 @@ setupSliders();
 setupRootControl();
 setupBodyControl();
 setupSessionControls();
-console.log('prime drifter organ — build: per-note envelope gains (pop-free re-attack)');
+console.log('prime drifter organ — build: tail budget + limiter');
 updateDisplay();
 requestAnimationFrame(overtoneLoop);
