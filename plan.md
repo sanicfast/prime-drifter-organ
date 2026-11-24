@@ -268,11 +268,17 @@ choreography. What the recorder writes is exactly what the player reads.
   repeatable instead of compounding the drift. Turn it off to layer a
   score over wherever the instrument currently lives. Escape stops
   playback. Hidden tabs stop instead of avalanche-replaying.
+- **Song book**: built-in tunes (`SONGS` in prime-vector.js) written in the
+  score format, loadable from a picker; every note verified pure by the
+  regression suite — the drift vector of every song only ever visits exact
+  5-limit scale degrees. Loading a song into the editor parks whatever it
+  replaces in the ↩ restore slot.
 - The score editor persists to localStorage; first run is seeded with the
-  opening of "Somewhere over the rainbow" (anchored-on-do version).
+  rainbow from the song book (one source of truth).
 
-**Test:** score utilities under the regression suite; seed score parses to
-13 events and round-trips through format unchanged.
+**Test:** score utilities and the song book under the regression suite;
+every song parses clean, sounds pure, ends home, and round-trips through
+format unchanged.
 
 ---
 

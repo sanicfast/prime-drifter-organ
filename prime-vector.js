@@ -296,3 +296,294 @@ function formatScore(events) {
     .join('\n');
 }
 
+
+// === Song Book ===
+// Built-in tunes in score format, verified pure: the drift vector of every
+// song only ever visits exact 5-limit scale degrees (regression-tested).
+// Add songs in this shape and the tests will grade them.
+
+const SONGS = [
+  {
+    name: "Twinkle, twinkle — pure steps",
+    score: `# twinkle — one octave, six degrees, every step the pure one:
+# q sol · 4 up small tone · v down small tone · b down big tone · g down semitone
+# steps chosen so each note rings pure against the drone — enable loop to vary it
+
+0.00 sethz 264
+0.01 .+
+0.04 .-
+0.25 space+
+0.64 space-
+0.69 space+
+1.08 space-
+1.11 q+
+1.13 space+
+1.14 q-
+1.52 space-
+1.57 space+
+1.96 space-
+1.99 4+
+2.01 space+
+2.02 4-
+2.40 space-
+2.45 space+
+2.84 space-
+2.87 v+
+2.89 space+
+2.90 v-
+3.84 space-
+3.87 b+
+3.89 space+
+3.90 b-
+4.28 space-
+4.33 space+
+4.72 space-
+4.75 g+
+4.77 space+
+4.78 g-
+5.16 space-
+5.21 space+
+5.60 space-
+5.63 v+
+5.65 space+
+5.66 v-
+6.04 space-
+6.09 space+
+6.48 space-
+6.51 b+
+6.53 space+
+6.54 b-
+7.48 space-
+7.51 q+
+7.53 space+
+7.54 q-
+7.92 space-
+7.97 space+
+8.36 space-
+8.39 b+
+8.41 space+
+8.42 b-
+8.80 space-
+8.85 space+
+9.24 space-
+9.27 g+
+9.29 space+
+9.30 g-
+9.68 space-
+9.73 space+
+10.12 space-
+10.15 v+
+10.17 space+
+10.18 v-
+11.00 space-
+11.03 w+
+11.05 space+
+11.06 w-
+11.44 space-
+11.49 space+
+11.88 space-
+11.91 b+
+11.93 space+
+11.94 b-
+12.32 space-
+12.37 space+
+12.76 space-
+12.79 g+
+12.81 space+
+12.82 g-
+13.20 space-
+13.25 space+
+13.64 space-
+13.67 v+
+13.69 space+
+13.70 v-
+14.52 space-
+14.55 b+
+14.57 space+
+14.58 b-
+14.96 space-
+15.01 space+
+15.40 space-
+15.43 q+
+15.45 space+
+15.46 q-
+15.84 space-
+15.89 space+
+16.28 space-
+16.31 4+
+16.33 space+
+16.34 4-
+16.72 space-
+16.77 space+
+17.16 space-
+17.19 v+
+17.21 space+
+17.22 v-
+18.16 space-
+18.19 b+
+18.21 space+
+18.22 b-
+18.60 space-
+18.65 space+
+19.04 space-
+19.07 g+
+19.09 space+
+19.10 g-
+19.48 space-
+19.53 space+
+19.92 space-
+19.95 v+
+19.97 space+
+19.98 v-
+20.36 space-
+20.41 space+
+20.80 space-
+20.83 b+
+20.85 space+
+20.86 b-
+21.90 space-
+22.10 .+
+22.13 .-
+22.25 0+
+22.28 0-
+`,
+  },
+  {
+    name: "Ode to joy — theme",
+    score: `# ode to joy — the whole theme is diatonic walkwork off mi:
+# t = 16:15 · 5 up big tone · 4 up small tone · b/v/g down
+# turn on loop for the repeats
+
+0.00 sethz 264
+0.01 .+
+0.04 .-
+0.23 e+
+0.25 space+
+0.26 e-
+0.56 space-
+0.61 space+
+0.92 space-
+0.95 t+
+0.97 space+
+0.98 t-
+1.28 space-
+1.31 5+
+1.33 space+
+1.34 5-
+1.64 space-
+1.69 space+
+2.00 space-
+2.03 b+
+2.05 space+
+2.06 b-
+2.36 space-
+2.39 g+
+2.41 space+
+2.42 g-
+2.72 space-
+2.75 v+
+2.77 space+
+2.78 v-
+3.08 space-
+3.11 b+
+3.13 space+
+3.14 b-
+3.44 space-
+3.49 space+
+3.80 space-
+3.83 5+
+3.85 space+
+3.86 5-
+4.16 space-
+4.19 4+
+4.21 space+
+4.22 4-
+4.52 space-
+4.57 space+
+5.18 space-
+5.21 v+
+5.23 space+
+5.24 v-
+5.54 space-
+5.59 space+
+6.69 space-
+6.89 .+
+6.92 .-
+7.04 0+
+7.07 0-
+`,
+  },
+  {
+    name: "Joy — the falling octave",
+    score: `# joy to the world — grab the octave and let the scale fall:
+# do' then g b v b g v b — the octave in pure descending steps,
+# landing on a major triad bloom over the drone
+
+0.00 sethz 264
+0.01 .+
+0.04 .-
+0.25 space+
+0.40 1+
+0.43 1-
+0.65 space-
+0.68 g+
+0.70 space+
+0.71 g-
+0.97 space-
+1.00 b+
+1.02 space+
+1.03 b-
+1.29 space-
+1.32 v+
+1.34 space+
+1.35 v-
+1.61 space-
+1.64 b+
+1.66 space+
+1.67 b-
+1.93 space-
+1.96 g+
+1.98 space+
+1.99 g-
+2.25 space-
+2.28 v+
+2.30 space+
+2.31 v-
+2.57 space-
+2.60 b+
+2.62 space+
+2.63 b-
+2.92 h+
+2.95 h-
+3.92 space-
+4.02 h+
+4.05 h-
+4.32 .+
+4.35 .-
+4.47 0+
+4.50 0-
+`,
+  },
+  {
+    name: "Somewhere, over the rainbow",
+    score: `# somewhere, over the rainbow — the opening, anchored on do
+# one held space: the octave leaps, then g ti, b la, v sol, b fa, g mi
+
+0.00 sethz 264
+0.01 .
+0.02 space+
+0.55 1+
+1.15 g+
+1.75 b+
+2.35 v+
+2.95 b+
+3.55 g+
+4.40 1-
+4.50 space-
+4.60 .+
+4.63 .-
+4.80 0+
+4.83 0-
+`,
+  }
+];

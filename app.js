@@ -1170,24 +1170,14 @@ const SCORE_HELP = '# score: bare number sets the time in seconds, "+0.25" advan
   '# <key>+ press · <key>- release · bare <key> quick tap · sethz <hz> moves the initial root · # comment\n' +
   '# keys: space 0-5 letters ; \' , . / \\ del  (digit keys always need + or -)';
 
-const SCORE_SEED = SCORE_HELP + '\n\n' +
-  '# "Somewhere, over the rainbow" — the opening, anchored on do\n' +
-  '0.00 sethz 264    # pin the key to C4, whatever the slider says\n' +
-  '0.00 .            # hum on: the drone is the tonic\n' +
-  '0.00 space+\n' +
-  '0.55 1+           # "Some—where" — that octave, gliding\n' +
-  '1.15 g+           # "there\'s"   ti  15:8\n' +
-  '1.75 b+           # "a place"   la  5:3\n' +
-  '2.35 v+           # "I heard"   sol 3:2\n' +
-  '2.95 b+           # "of"        fa  4:3\n' +
-  '3.55 g+           # "a"         mi  5:4\n' +
-  '4.40 1-\n' +
-  '4.45 space-\n' +
-  '4.55 .            # hum off\n';
+// The editor starts life as the rainbow from the song book — one source of truth.
+const SCORE_SEED = (typeof SONGS !== 'undefined' && SONGS.length)
+  ? (SONGS.find(s => /rainbow/i.test(s.name)) || SONGS[0]).score
+  : SCORE_HELP + '\n';
 
-let scoreEl, pbStatusEl, recBtn, playBtn, stopBtn, pbLoopEl, pbRestoreBtn, pbResetEl;
+let scoreEl, pbStatusEl, recBtn, playBtn, stopBtn, pbLoopEl, pbRestoreBtn, pbResetEl, pbSongsEl;
 let recEvents = null;    // array of events while recording, else null
-let discardedScore = null; // last score displaced by a recording (one-slot undo)
+let discardedScore = null; // last score displaced by a recording or song load (one-slot undo)
 let lastRecHz = null;      // coalescing tracker for recorded slider moves
 let recStartMs = 0;
 let playing = false;
@@ -1272,6 +1262,21 @@ function writeScore(events) {
     pbRestoreBtn.hidden = false;
   }
   saveScore();
+}
+
+// Load a built-in song into the editor. Like recording, it never silently
+// destroys: a playable score it displaces stays one click away via restore.
+function loadSong(i) {
+  const song = SONGS[i];
+  if (!song) return;
+  const previous = scoreEl.value;
+  if (previous.trim() !== song.score.trim() && parseScore(previous).events.length > 0) {
+    discardedScore = previous;
+    pbRestoreBtn.hidden = false;
+  }
+  scoreEl.value = song.score;
+  saveScore();
+  setStatus(`“${song.name}” loaded — press play`);
 }
 
 // Snap the instrument back to defaults so a pass starts where the score
@@ -1421,6 +1426,16 @@ function setupSessionControls() {
     saveScore();
     setStatus('previous score restored');
   });
+
+  // Song picker: built-in tunes, each verified pure by the test suite.
+  pbSongsEl = document.getElementById('pb-songs');
+  for (const [i, song] of SONGS.entries()) {
+    const opt = document.createElement('option');
+    opt.value = String(i);
+    opt.textContent = song.name;
+    pbSongsEl.appendChild(opt);
+  }
+  pbSongsEl.addEventListener('change', () => loadSong(parseInt(pbSongsEl.value, 10)));
 
   // Background tabs throttle timers; don't let a hidden tab avalanche on return.
   document.addEventListener('visibilitychange', () => {

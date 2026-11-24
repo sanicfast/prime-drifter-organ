@@ -250,6 +250,38 @@ assert('score: every code round-trips its token',
     rt.events.length === events.length && rt.events[0].hz === 330.5);
 }
 
+// === Test Suite: Built-in Songs ===
+
+// The song book must stay pure: simulate each score's drift vector and insist
+// it only ever visits exact 5-limit scale degrees, and ends back at the root.
+{
+  const PURE = new Set([
+    '0,0,0,0', '1,0,0,0', '-3,2,0,0', '-2,0,1,0',
+    '2,-1,0,0', '-1,1,0,0', '0,-1,1,0', '-3,1,1,0',
+  ]); // do do' re mi fa sol la ti
+  assert('songs: catalog has tunes', SONGS.length >= 4);
+  for (const song of SONGS) {
+    const { events, errors } = parseScore(song.score);
+    assert(`song "${song.name}": parses clean`, errors.length === 0 && events.length > 8);
+    let vec = [0, 0, 0, 0];
+    let pure = true;
+    let sawSpace = false;
+    for (const ev of events) {
+      if (ev.type === 'sethz' || !ev.down) continue;
+      if (ev.code === 'Space') { sawSpace = true; continue; }
+      if (ev.code === 'Digit0') { vec = [0, 0, 0, 0]; continue; }
+      const move = ALL_MOVES[ev.code];
+      if (!move) continue; // chords, hum etc. don't move the root
+      vec = vec.map((e, i) => e + move.vector.exp[i]);
+      if (!PURE.has(vec.join(','))) pure = false;
+    }
+    assert(`song "${song.name}": sounds`, sawSpace);
+    assert(`song "${song.name}": every landing is a pure JI degree`, pure);
+    assert(`song "${song.name}": ends home`, vec.join(',') === '0,0,0,0');
+    assert(`song "${song.name}": round-trips through format`, parseScore(formatScore(events)).errors.length === 0);
+  }
+}
+
 // === Render Results ===
 
 const resultsEl = document.getElementById('results');

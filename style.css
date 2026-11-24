@@ -276,6 +276,30 @@ kbd {
   cursor: pointer;
 }
 
+/* song book picker */
+.pb-row label[for='pb-songs'] {
+  font-size: 0.65rem;
+  color: #888;
+}
+
+#pb-songs {
+  flex: 1;
+  min-width: 12rem;
+  background: #14141f;
+  border: 1px solid #2c2c44;
+  border-radius: 6px;
+  color: #aab;
+  font-family: inherit;
+  font-size: 0.7rem;
+  padding: 0.32rem 0.5rem;
+  cursor: pointer;
+}
+
+#pb-songs:hover {
+  border-color: #4a4a70;
+  color: #dde;
+}
+
 #pb-status {
   font-size: 0.62rem;
   color: #667;

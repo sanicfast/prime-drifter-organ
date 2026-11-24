@@ -175,18 +175,24 @@
     <div class="envelope">
       <div class="env-title">playback</div>
       <div class="pb-row">
+        <label for="pb-songs">song book</label>
+        <select id="pb-songs" data-tip="built-in tunes, every note a pure ratio — loads into the editor (↩ restores what it replaced)">
+          <option value="">choose a tune…</option>
+        </select>
+      </div>
+      <div class="pb-row">
         <button id="pb-rec" class="pb-btn" data-tip="record your keystrokes; stopping writes the score below (↩ restores what it replaced)">● rec</button>
         <button id="pb-play" class="pb-btn" data-tip="play the score below, exactly as written">▶ play</button>
         <button id="pb-stop" class="pb-btn" data-tip="stop playback and let go of everything">■ stop</button>
         <label class="pb-loop"><input type="checkbox" id="pb-loop"> loop</label>
         <label class="pb-loop" data-tip="before playing (and before every loop): root goes home, chords release, hum and modes turn off — so passes are repeatable"><input type="checkbox" id="pb-reset" checked> reset</label>
-        <button id="pb-restore" class="pb-btn" hidden data-tip="undo a recording that replaced the score">↩ restore</button>
+        <button id="pb-restore" class="pb-btn" hidden data-tip="undo a recording or song that replaced the score">↩ restore</button>
         <span id="pb-status">idle</span>
       </div>
       <textarea id="pb-score" rows="9" spellcheck="false" autocomplete="off"></textarea>
       <div class="hv-caption">the score is keystroke choreography — the organ reads exactly what it records.
       edit by hand to write music; it is saved in this browser. keys mirror the cheat sheet above.
-      clear the score and reload to bring the example back.</div>
+      the song book has pure-tuned classics; clear the score and reload to start over.</div>
     </div>
   </div>
 
