@@ -6,6 +6,7 @@ const ROOT_HZ_LOW = 55;   // slider bounds for the initial root
 const ROOT_HZ_HIGH = 880;
 let baseHz = 264;         // where vector [0,0,0,0] lives (default C4 = 264 Hz) — also the hum's pitch
 const VOLUME = 0.3;
+let masterVolume = 1;      // output level — a setting like the envelope: never in the undo stack
 const HUM_VOLUME = 0.05;
 const HUM_FADE = 0.4;
 const VOICE_FADE = 0.06; // crossfade time for voices joining/leaving a held chord
@@ -26,12 +27,12 @@ const PARTIAL_MIX = [
 ];
 
 let audioCtx = null;
-let masterGain = null; // static mix bus — note envelopes never touch it
+let masterGain = null; // mix bus + master volume — note envelopes never touch it
 let noiseBuffer = null;
 let voices = []; // active voice group (array of voice objects)
 let noteGain = null; // gain node of the current note — its envelope is its own
 let noteGroups = []; // {gain, voices} of current + still-ringing notes (tail budget)
-let releasing = new Set(); // voice groups still fading out from a previous note
+let releasing = new Set(); // voices currently fading; the overtone view draws them dim
 let isSounding = false;
 let currentVector = new PrimeVector(0, 0, 0, 0);
 let lastMove = null;
@@ -146,7 +147,7 @@ function initAudio() {
   if (audioCtx) return;
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   masterGain = audioCtx.createGain();
-  masterGain.gain.value = 1; // static: each note rides its own gain node
+  masterGain.gain.value = masterVolume; // the volume slider's bus; envelopes never touch it
 
   // Gentle safety limiter: overlapping tails + hum + a full harmonic stack
   // can sum past 1.0 on fast playing; soft-clip that instead of hard-crunching.
@@ -528,6 +529,22 @@ function setupBodyControl() {
   });
 }
 
+function setupVolumeControl() {
+  const input = document.getElementById('vol-ctl');
+  const label = document.getElementById('vol-val');
+  label.textContent = (parseFloat(input.value) || 1).toFixed(2);
+  input.addEventListener('input', () => {
+    const v = parseFloat(input.value);
+    if (!Number.isFinite(v)) return;
+    masterVolume = v;
+    label.textContent = v.toFixed(2);
+    if (audioCtx) {
+      // Glide, don't jump: a gain step mid-note is a click by definition.
+      masterGain.gain.setTargetAtTime(v, audioCtx.currentTime, 0.02);
+    }
+  });
+}
+
 // === Tonic Hum ===
 
 function startHum() {
@@ -537,9 +554,9 @@ function startHum() {
   const freq = foldToAudible(baseHz);
   const now = audioCtx.currentTime;
 
-  // masterGain is a static bus now, so the hum rides it safely: its own
-  // gain node keeps it independent of the note envelopes, and the shared
-  // output limiter catches hum + notes together.
+  // The hum rides the shared bus too: its own gain node keeps it independent
+  // of the note envelopes, the master volume scales it with everything else,
+  // and the output limiter catches hum + notes together.
   const gain = audioCtx.createGain();
   gain.gain.setValueAtTime(0, now);
   gain.gain.linearRampToValueAtTime(HUM_VOLUME, now + HUM_FADE);
@@ -1497,11 +1514,29 @@ function setupSessionControls() {
     pbSongsEl.appendChild(opt);
   }
   pbSongsEl.addEventListener('change', () => loadSong(parseInt(pbSongsEl.value, 10)));
+}
 
+// === Safety Nets ===
+
+// An inactive tab or window never receives keyup: a manually held space
+// would ring forever with its key stuck lit. When focus leaves us, let go
+// of everything — WITHOUT pivoting: tabbing away is not a musical release,
+// so the root should not move just because you switched apps.
+function releaseEverything() {
+  stopPlayback();
+  if (isSounding) {
+    stopTone();
+    highlightKey('Space', false);
+  }
+}
+
+function setupSafetyNets() {
   // Background tabs throttle timers; don't let a hidden tab avalanche on return.
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) stopPlayback();
+    if (document.hidden) releaseEverything();
   });
+  // ⌘Tab keeps the page technically visible, yet keyup never arrives.
+  window.addEventListener('blur', releaseEverything);
 }
 
 // === Init ===
@@ -1509,7 +1544,9 @@ function setupSessionControls() {
 setupSliders();
 setupRootControl();
 setupBodyControl();
+setupVolumeControl();
 setupSessionControls();
-console.log('prime drifter organ — build: pitch-even loudness');
+setupSafetyNets();
+console.log('prime drifter organ — build: step 16 polish');
 updateDisplay();
 requestAnimationFrame(overtoneLoop);

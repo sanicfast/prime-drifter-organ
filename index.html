@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Prime Drifter Organ</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='7'%20fill='%230f0f1a'/%3E%3Cline%20x1='9'%20y1='23'%20x2='22'%20y2='10'%20stroke='%237fdbca'%20stroke-opacity='.45'%20stroke-width='2'/%3E%3Ccircle%20cx='9'%20cy='23'%20r='4'%20fill='%237fdbca'/%3E%3Ccircle%20cx='22'%20cy='10'%20r='4'%20fill='%23e6b877'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -169,6 +170,16 @@
           <input type="range" id="env-r" min="0.01" max="2" step="0.01" value="0.3">
           <span id="env-r-val">0.30s</span>
         </div>
+      </div>
+    </div>
+
+    <div class="envelope">
+      <div class="env-title">output</div>
+      <div class="root-row">
+        <label for="vol-ctl" data-tip="master level for everything — it sits BEFORE the safety limiter, so if loud bass chords feel squeezed, roll this down rather than losing bottom end">volume</label>
+        <input type="range" id="vol-ctl" min="0" max="1" step="0.01" value="1"
+               data-tip="notes and hum both ride this one dial; the limiter keeps the output honest no matter where it sits">
+        <span id="vol-val">1.00</span>
       </div>
     </div>
 
