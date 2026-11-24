@@ -615,7 +615,27 @@ kbd {
 }
 
 @media (max-width: 700px) {
+  .container {
+    padding: 1rem;
+  }
   .guide-grid {
     grid-template-columns: 1fr;
+  }
+  .env-controls {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  /* keyboard grid is 13 fixed 52px columns (~692px) — make it fluid */
+  .cheatsheet-grid {
+    grid-template-columns: repeat(5, 1fr) 6px repeat(8, 1fr);
+    gap: 4px;
+  }
+  .cheat-key kbd {
+    min-width: 0;
+    width: 100%;
+    padding: 4px 2px;
+    font-size: 0.62rem;
+  }
+  .cheat-key span {
+    font-size: 0.5rem;
   }
 }
