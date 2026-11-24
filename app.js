@@ -1421,5 +1421,6 @@ setupSliders();
 setupRootControl();
 setupBodyControl();
 setupSessionControls();
+console.log('prime drifter organ — build: scores with sethz (e765474)');
 updateDisplay();
 requestAnimationFrame(overtoneLoop);
