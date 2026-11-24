@@ -1171,7 +1171,7 @@ const SCORE_SEED = SCORE_HELP + '\n\n' +
   '4.45 space-\n' +
   '4.55 .            # hum off\n';
 
-let scoreEl, pbStatusEl, recBtn, playBtn, stopBtn, pbLoopEl, pbRestoreBtn;
+let scoreEl, pbStatusEl, recBtn, playBtn, stopBtn, pbLoopEl, pbRestoreBtn, pbResetEl;
 let recEvents = null;    // array of events while recording, else null
 let discardedScore = null; // last score displaced by a recording (one-slot undo)
 let recStartMs = 0;
@@ -1237,6 +1237,23 @@ function writeScore(events) {
   saveScore();
 }
 
+// Snap the instrument back to defaults so a pass starts where the score
+// assumes it starts: home root, nothing voiced, no modes engaged.
+function resetInstrument() {
+  if (!currentVector.isZero()) {
+    pushUndo(currentVector.negate(), 'reset');
+    currentVector = new PrimeVector(0, 0, 0, 0);
+    lastMove = null;
+    updateDisplay('reset');
+  }
+  if (activeChord || activeAdditives.size > 0) clearVoicing();
+  if (humNodes) toggleHum();
+  if (pivotMode) togglePivot();
+  if (holdMode) toggleHold();
+  if (invertedMode) toggleInvert();
+  updateFrequencyIfSounding();
+}
+
 function startPlayback() {
   if (recEvents) stopRecording();
   stopPlayback();
@@ -1249,6 +1266,7 @@ function startPlayback() {
     setStatus('nothing to play');
     return;
   }
+  if (pbResetEl.checked) resetInstrument();
   playing = true;
   pressedCodes = new Set();
   playTotalMs = events[events.length - 1].t;
@@ -1339,6 +1357,7 @@ function setupSessionControls() {
   stopBtn = document.getElementById('pb-stop');
   pbLoopEl = document.getElementById('pb-loop');
   pbRestoreBtn = document.getElementById('pb-restore');
+  pbResetEl = document.getElementById('pb-reset');
 
   let saved = null;
   try { saved = localStorage.getItem(SCORE_STORAGE_KEY); } catch (err) { /* private mode */ }

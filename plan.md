@@ -260,7 +260,11 @@ choreography. What the recorder writes is exactly what the player reads.
   to live playing, and live keystrokes can be layered over playback.
 - **Transport**: rec / play / stop (stop releases held events, clears
   voicing, kills pending timers), loop toggle, live time/event counters.
-  Escape stops playback. Hidden tabs stop instead of avalanche-replaying.
+  A **reset** toggle (default on) snaps to defaults before every pass —
+  root home, chords released, hum and modes off — so plays and loops are
+  repeatable instead of compounding the drift. Turn it off to layer a
+  score over wherever the instrument currently lives. Escape stops
+  playback. Hidden tabs stop instead of avalanche-replaying.
 - The score editor persists to localStorage; first run is seeded with the
   opening of "Somewhere over the rainbow" (anchored-on-do version).
 
