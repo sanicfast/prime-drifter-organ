@@ -173,7 +173,7 @@ function getAudibleFreq() {
 }
 
 // Adds the upper harmonic stack (×3 ×4 ×5 ×7) to a destination voice chain
-function addHarmonics(freq, dest) {
+function addHarmonics(freq, dest, startAt) {
   const partials = [];
   for (const { mult, mix } of PARTIAL_MIX) {
     const osc = audioCtx.createOscillator();
@@ -183,7 +183,7 @@ function addHarmonics(freq, dest) {
     gain.gain.value = mix * body;
     osc.connect(gain);
     gain.connect(dest);
-    osc.start();
+    osc.start(startAt);
     partials.push({ osc, gain, mult, mix });
   }
   return partials;
@@ -192,6 +192,15 @@ function addHarmonics(freq, dest) {
 function createVoice(freq, key, dest) {
   const now = audioCtx.currentTime;
   const nodes = [];
+
+  // Decorrelated start: oscillators would all begin at phase zero and the
+  // noise sources would all read the same buffer offset, so fast notes on
+  // the same pitch add PHASE-COHERENTLY — stacked spam hits the limiter far
+  // sooner than the tail budget implies. A sub-millisecond start offset
+  // (identical across one voice's own partials, so timbre is untouched)
+  // makes separate notes add as independent waves, not one doubled wave.
+  const startAt = now + 0.001 + Math.random() * 0.002;
+  const noiseAt = () => Math.random() * (noiseBuffer.duration - 0.5);
 
   // Per-voice gain: lets a single voice fade in/out while the note is held
   const voiceGain = audioCtx.createGain();
@@ -207,7 +216,7 @@ function createVoice(freq, key, dest) {
   gain1.gain.value = 1.0;
   osc1.connect(gain1);
   gain1.connect(voiceGain);
-  osc1.start();
+  osc1.start(startAt);
   nodes.push(osc1, gain1);
 
   // Octave partial
@@ -218,11 +227,11 @@ function createVoice(freq, key, dest) {
   gain2.gain.value = 0.12;
   osc2.connect(gain2);
   gain2.connect(voiceGain);
-  osc2.start();
+  osc2.start(startAt);
   nodes.push(osc2, gain2);
 
   // Upper harmonic stack (glides with the fundamental, retunes with body)
-  const partials = addHarmonics(freq, voiceGain);
+  const partials = addHarmonics(freq, voiceGain, startAt);
   for (const p of partials) nodes.push(p.osc, p.gain);
 
   // Breath noise
@@ -238,7 +247,7 @@ function createVoice(freq, key, dest) {
   noiseSrc.connect(bpFilter);
   bpFilter.connect(noiseGain);
   noiseGain.connect(voiceGain);
-  noiseSrc.start();
+  noiseSrc.start(startAt, noiseAt());
   nodes.push(noiseSrc, bpFilter, noiseGain);
 
   // Chiff
@@ -249,13 +258,13 @@ function createVoice(freq, key, dest) {
   chiffFilter.type = 'highpass';
   chiffFilter.frequency.value = freq * 2.5;
   const chiffGain = audioCtx.createGain();
-  chiffGain.gain.setValueAtTime(0.12, now);
-  chiffGain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+  chiffGain.gain.setValueAtTime(0.12, startAt);
+  chiffGain.gain.exponentialRampToValueAtTime(0.001, startAt + 0.06);
   chiffSrc.connect(chiffFilter);
   chiffFilter.connect(chiffGain);
   chiffGain.connect(voiceGain);
-  chiffSrc.start();
-  chiffSrc.stop(now + 0.08);
+  chiffSrc.start(startAt, noiseAt());
+  chiffSrc.stop(startAt + 0.08);
   nodes.push(chiffSrc, chiffFilter, chiffGain);
 
   return {
@@ -541,7 +550,7 @@ function startHum() {
   osc2.start();
 
   // The drone gets the harmonic stack too: it becomes a full tuning fork
-  const partials = addHarmonics(freq, gain);
+  const partials = addHarmonics(freq, gain, now);
 
   humNodes = { oscs: [osc, osc2, ...partials.map(p => p.osc)], gains: [gain, gain2], partials };
   setHumActive(true);
@@ -1489,6 +1498,6 @@ setupSliders();
 setupRootControl();
 setupBodyControl();
 setupSessionControls();
-console.log('prime drifter organ — build: tail budget + limiter');
+console.log('prime drifter organ — build: decorrelated voice starts');
 updateDisplay();
 requestAnimationFrame(overtoneLoop);
