@@ -146,17 +146,16 @@ Tech stack: vanilla HTML / CSS / JS, Web Audio API, Canvas for visualization. No
 
 ---
 
-## Step 11 — Lattice Visualization
+## Step 11 — Visualization (shipped as the overtone view, not the lattice)
 
-**Goal:** See your position in prime-harmonic space.
+**Goal:** See what the ear is grading.
 
-- Canvas element showing a 2D lattice:
-  - X-axis = exponent of 3
-  - Y-axis = exponent of 5
-  - Color/hue = exponent of 7
-- Plot history trail (fading path of recent positions)
-- Current position highlighted
-- Log-scale Hz history graph below or beside lattice
+The planned 2D/4D prime-lattice was dropped: mapping harmonicity is more
+interesting than mapping position. The shipped **overtones view** draws every
+sounding voice's partial stack on a log-frequency axis and marks cross-voice
+partial collisions: gold dot = dead-on (pure interval signature), red ✕ =
+near-miss buzz with its ΔHz beat rate. Fades voices trail dimly; the hum
+grades everything against the tonic.
 
 **Test:** Navigate around — lattice trail follows. 7-exponent shifts color. Graph shows Hz over time in log scale.
 

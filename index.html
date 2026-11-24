@@ -52,47 +52,9 @@
     </div>
 
     <div class="envelope">
-      <div class="env-title">initial root</div>
-      <div class="root-row">
-        <input type="range" id="base-hz" min="0" max="1" step="0.00001" value="0.56576"
-               data-tip="where the zero vector lives — 0 key always returns here">
-        <span id="base-hz-val">264.0 Hz ≈ C4</span>
-      </div>
-    </div>
-
-    <div class="envelope">
-      <div class="env-title">timbre</div>
-      <div class="root-row">
-        <input type="range" id="body-ctl" min="0" max="1" step="0.01" value="0.6"
-               data-tip="harmonic stack — 0 is pure airy breath, higher adds the pipe where purity buzzes or locks">
-        <span id="body-val">0.60</span>
-      </div>
-    </div>
-
-    <div class="envelope">
-      <div class="env-title">envelope</div>
-      <div class="env-controls">
-        <div class="env-slider">
-          <label for="env-a">attack</label>
-          <input type="range" id="env-a" min="0.005" max="0.5" step="0.005" value="0.05">
-          <span id="env-a-val">0.050s</span>
-        </div>
-        <div class="env-slider">
-          <label for="env-d">decay</label>
-          <input type="range" id="env-d" min="0.01" max="1" step="0.01" value="0.1">
-          <span id="env-d-val">0.10s</span>
-        </div>
-        <div class="env-slider">
-          <label for="env-s">sustain</label>
-          <input type="range" id="env-s" min="0" max="1" step="0.05" value="0.7">
-          <span id="env-s-val">0.70</span>
-        </div>
-        <div class="env-slider">
-          <label for="env-r">release</label>
-          <input type="range" id="env-r" min="0.01" max="2" step="0.01" value="0.3">
-          <span id="env-r-val">0.30s</span>
-        </div>
-      </div>
+      <div class="env-title">overtones</div>
+      <canvas id="harmonic-canvas"></canvas>
+      <div class="hv-caption">ghost partials of every sounding note — ✦ where partials of two voices land dead-on each other (in tune), ✕ where they land near and buzz</div>
     </div>
 
     <div class="cheatsheet-grid">
@@ -164,6 +126,51 @@
     <div class="actions-row">
       <div class="cheat-key" data-key="Space" data-tip="Hold to sound"><kbd>space</kbd><span>sound</span></div>
     </div>
+
+    <div class="envelope">
+      <div class="env-title">initial root</div>
+      <div class="root-row">
+        <input type="range" id="base-hz" min="0" max="1" step="0.00001" value="0.56576"
+               data-tip="where the zero vector lives — 0 key always returns here">
+        <span id="base-hz-val">264.0 Hz ≈ C4</span>
+      </div>
+    </div>
+
+    <div class="envelope">
+      <div class="env-title">timbre</div>
+      <div class="root-row">
+        <label for="body-ctl" data-tip="how many overtones the pipe adds to the fundamental — raise it until pure intervals audibly lock and mistunings audibly buzz">brightness</label>
+        <input type="range" id="body-ctl" min="0" max="1" step="0.01" value="0.6"
+               data-tip="overtones = ghost copies of each note at ×2 ×3 ×4 ×5 ×7 — this mixes them in">
+        <span id="body-val">0.60</span>
+      </div>
+    </div>
+
+    <div class="envelope">
+      <div class="env-title">envelope</div>
+      <div class="env-controls">
+        <div class="env-slider">
+          <label for="env-a">attack</label>
+          <input type="range" id="env-a" min="0.005" max="0.5" step="0.005" value="0.05">
+          <span id="env-a-val">0.050s</span>
+        </div>
+        <div class="env-slider">
+          <label for="env-d">decay</label>
+          <input type="range" id="env-d" min="0.01" max="1" step="0.01" value="0.1">
+          <span id="env-d-val">0.10s</span>
+        </div>
+        <div class="env-slider">
+          <label for="env-s">sustain</label>
+          <input type="range" id="env-s" min="0" max="1" step="0.05" value="0.7">
+          <span id="env-s-val">0.70</span>
+        </div>
+        <div class="env-slider">
+          <label for="env-r">release</label>
+          <input type="range" id="env-r" min="0.01" max="2" step="0.01" value="0.3">
+          <span id="env-r-val">0.30s</span>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div id="overlay" class="overlay hidden">
@@ -222,9 +229,11 @@
           attack, decay, sustain, release.</p>
           <p>the <b>initial root</b> slider picks where zero lives (55–880 Hz) —
           the hum, the <kbd>0</kbd> key, and undo all follow it home.</p>
-          <p>the <b>body</b> slider opens the pipe's harmonic stack. Low is airy
+          <p>the <b>brightness</b> slider opens the pipe's harmonic stack. Low is airy
           breath; higher is a small reed where pure intervals ring glassy still
-          and mistunings buzz — the partials are what the tuning acts through.</p>
+          and mistunings buzz — the partials are what the tuning acts through.
+          Watch the <b>overtones</b> panel while you play it: gold dots are
+          partials landing dead-on, red ✕ are the near-misses that buzz.</p>
         </section>
 
         <section>

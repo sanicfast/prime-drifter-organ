@@ -209,6 +209,26 @@ kbd {
   gap: 1rem;
 }
 
+.root-row label {
+  font-size: 0.65rem;
+  color: #888;
+  text-transform: lowercase;
+  cursor: help;
+}
+
+#harmonic-canvas {
+  display: block;
+  width: 100%;
+  height: 150px;
+}
+
+.hv-caption {
+  font-size: 0.62rem;
+  color: #556;
+  margin-top: 0.5rem;
+  line-height: 1.5;
+}
+
 .root-row span {
   font-size: 0.8rem;
   color: #7fdbca;
@@ -272,6 +292,7 @@ kbd {
   gap: 1rem;
   justify-content: center;
   margin-top: 0.5rem;
+  margin-bottom: 1.5rem;
 }
 
 .cheat-section-label {

@@ -671,6 +671,157 @@ function releaseHeldAdditive(code) {
   updateFrequencyIfSounding();
 }
 
+// === Overtones View ===
+
+// Draws every sounding voice's partial stack on a log-frequency axis and
+// marks where partials of DIFFERENT voices collide: dead-on = tuning locks,
+// near-but-off inside the roughness band = the audible buzz. What you see is
+// the beating physics itself; quieter partials (low brightness) honestly
+// produce fainter marks, because they genuinely beat less audibly.
+
+const harmonicCanvas = document.getElementById('harmonic-canvas');
+const hvCtx = harmonicCanvas.getContext('2d');
+
+const HV_LOW = 40;      // Hz range of the axis
+const HV_HIGH = 8000;
+const HV_RATIO_LOG = Math.log(HV_HIGH / HV_LOW);
+
+function hvX(f, w) {
+  return w * (Math.log(f / HV_LOW) / HV_RATIO_LOG);
+}
+
+function hvPartials() {
+  // Partials actually present in a voice, with their current amplitudes
+  const list = [{ n: 1, a: 1 }, { n: 2, a: 0.12 }];
+  for (const p of PARTIAL_MIX) {
+    if (p.mix * body > 0.001) list.push({ n: p.mult, a: p.mix * body });
+  }
+  return list;
+}
+
+function drawOvertoneView() {
+  const dpr = window.devicePixelRatio || 1;
+  const w = harmonicCanvas.clientWidth;
+  const h = 150;
+  if (harmonicCanvas.width !== w * dpr || harmonicCanvas.height !== h * dpr) {
+    harmonicCanvas.width = w * dpr;
+    harmonicCanvas.height = h * dpr;
+  }
+  const ctx = hvCtx;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+
+  // octave grid at powers-of-two above 55
+  ctx.font = '9px monospace';
+  ctx.textAlign = 'center';
+  for (const gridF of [55, 110, 220, 440, 880, 1760, 3520, 7040]) {
+    const x = hvX(gridF, w);
+    ctx.strokeStyle = '#1e1e32';
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, h);
+    ctx.stroke();
+    ctx.fillStyle = '#4a4a66';
+    ctx.fillText(String(gridF), x, h - 4);
+  }
+
+  // Collect sources: hum, held voices, fading voices (dimmer)
+  const sources = [];
+  if (humNodes) {
+    sources.push({ freq: foldToAudible(baseHz), color: '#e6b877', dim: 1, label: true });
+  }
+  for (const v of voices) sources.push({ freq: v.freq, color: '#7fdbca', dim: 1, label: true });
+  for (const group of releasing) {
+    for (const v of group) sources.push({ freq: v.freq, color: '#7fdbca', dim: 0.35, label: false });
+  }
+
+  // Partial ticks per source
+  const partials = hvPartials();
+  const seen = []; // {f, a, src}
+  for (const s of sources) {
+    for (const p of partials) {
+      const f = s.freq * p.n;
+      if (f < HV_LOW || f > HV_HIGH) continue;
+      const x = hvX(f, w);
+      const tickH = 6 + 60 * Math.sqrt(Math.min(1, p.a));
+      ctx.strokeStyle = s.color;
+      ctx.globalAlpha = s.dim * Math.min(1, 0.25 + p.a * 3);
+      ctx.lineWidth = p.n === 1 ? 2 : 1;
+      ctx.beginPath();
+      ctx.moveTo(x, h - 16);
+      ctx.lineTo(x, h - 16 - tickH);
+      ctx.stroke();
+      if (p.n === 1 && s.label) {
+        ctx.globalAlpha = s.dim;
+        ctx.fillStyle = s.color;
+        ctx.font = '9px monospace';
+        ctx.fillText('≈' + approxNoteName(s.freq), x, h - 16 - tickH - 4);
+      }
+      seen.push({ f, a: p.a * s.dim, color: s.color, src: s });
+    }
+  }
+  ctx.globalAlpha = 1;
+  ctx.lineWidth = 1;
+
+  // Cross-source partial collisions
+  const marks = [];
+  for (let i = 0; i < seen.length; i++) {
+    for (let j = i + 1; j < seen.length; j++) {
+      const A = seen[i], B = seen[j];
+      if (A.src === B.src) continue;
+      const df = Math.abs(A.f - B.f);
+      const rel = df / Math.min(A.f, B.f);
+      const strength = Math.min(A.a, B.a);
+      if (strength < 0.003) continue; // both partials must actually carry sound
+      if (rel < 0.004) {
+        marks.push({ f: (A.f + B.f) / 2, kind: 'lock', strength });
+      } else if (df < 45 && rel < 0.06) {
+        marks.push({ f: (A.f + B.f) / 2, kind: 'buzz', strength, df });
+      }
+    }
+  }
+  marks.sort((a, b) => b.strength - a.strength);
+  const drawn = [];
+  for (const m of marks) {
+    if (drawn.some(d => Math.abs(d - m.f) / m.f < 0.004)) continue; // one mark per freq
+    drawn.push(m.f);
+    if (drawn.length > 8) break;
+    const x = hvX(m.f, w);
+    if (m.kind === 'lock') {
+      ctx.fillStyle = '#ffe9a8';
+      ctx.globalAlpha = 0.5 + Math.min(0.5, m.strength * 4);
+      ctx.beginPath();
+      ctx.arc(x, 10, 3, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      ctx.strokeStyle = '#ff8080';
+      ctx.globalAlpha = 0.5 + Math.min(0.5, m.strength * 4);
+      ctx.beginPath();
+      ctx.moveTo(x - 3, 7); ctx.lineTo(x + 3, 13);
+      ctx.moveTo(x + 3, 7); ctx.lineTo(x - 3, 13);
+      ctx.stroke();
+      if (drawn.length <= 3 && m.df > 1) {
+        ctx.fillStyle = '#ff8080';
+        ctx.font = '8px monospace';
+        ctx.fillText('Δ' + m.df.toFixed(1) + 'Hz', x, 22);
+      }
+    }
+  }
+  ctx.globalAlpha = 1;
+
+  if (sources.length === 0) {
+    ctx.fillStyle = '#4a4a66';
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('hold space — every voice shows its overtone ghost-stack here', w / 2, h / 2);
+  }
+}
+
+function overtoneLoop() {
+  drawOvertoneView();
+  requestAnimationFrame(overtoneLoop);
+}
+
 // === Display ===
 
 function updateDisplay(moveName) {
@@ -777,6 +928,11 @@ function clearVoicing() {
 }
 
 function handleKeyDown(e) {
+  // Always suppress space's default (page scroll / activating a focused
+  // control) — including auto-repeat events, which bail out below.
+  // Without this, holding space long enough starts page-downing the app.
+  if (e.code === 'Space') e.preventDefault();
+
   if (e.repeat) return;
 
   if (e.code === 'Escape') {
@@ -786,7 +942,6 @@ function handleKeyDown(e) {
   }
 
   if (e.code === 'Space') {
-    e.preventDefault();
     highlightKey('Space', true);
     startTone();
     return;
@@ -983,3 +1138,4 @@ setupSliders();
 setupRootControl();
 setupBodyControl();
 updateDisplay();
+requestAnimationFrame(overtoneLoop);
