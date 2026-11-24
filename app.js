@@ -8,7 +8,6 @@ let baseHz = 264;         // where vector [0,0,0,0] lives (default C4 = 264 Hz) 
 const VOLUME = 0.3;
 const HUM_VOLUME = 0.05;
 const HUM_FADE = 0.4;
-const QUICK_FADE = 0.01; // fast dip to silence before re-attacking, kills click from hard stops
 const VOICE_FADE = 0.06; // crossfade time for voices joining/leaving a held chord
 
 let body = 0.6; // timbre: weight of the upper harmonic stack (0 = airy sine only)
@@ -25,9 +24,10 @@ const PARTIAL_MIX = [
 ];
 
 let audioCtx = null;
-let masterGain = null;
+let masterGain = null; // static mix bus — note envelopes never touch it
 let noiseBuffer = null;
 let voices = []; // active voice group (array of voice objects)
+let noteGain = null; // gain node of the current note — its envelope is its own
 let releasing = new Set(); // voice groups still fading out from a previous note
 let isSounding = false;
 let currentVector = new PrimeVector(0, 0, 0, 0);
@@ -143,7 +143,7 @@ function initAudio() {
   if (audioCtx) return;
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   masterGain = audioCtx.createGain();
-  masterGain.gain.value = 0;
+  masterGain.gain.value = 1; // static: each note rides its own gain node
   masterGain.connect(audioCtx.destination);
 
   const duration = 2;
@@ -176,14 +176,14 @@ function addHarmonics(freq, dest) {
   return partials;
 }
 
-function createVoice(freq, key) {
+function createVoice(freq, key, dest) {
   const now = audioCtx.currentTime;
   const nodes = [];
 
   // Per-voice gain: lets a single voice fade in/out while the note is held
   const voiceGain = audioCtx.createGain();
   voiceGain.gain.value = 1;
-  voiceGain.connect(masterGain);
+  voiceGain.connect(dest);
   nodes.push(voiceGain);
 
   // Fundamental
@@ -258,7 +258,7 @@ function destroyVoice(v) {
   }
 }
 
-function stopVoicesAt(voiceList, when) {
+function stopVoicesAt(voiceList, when, extraNodes) {
   // Hard-stop voices on the audio clock at `when` (they must be silent by
   // then — stopping an audible oscillator clicks). setTimeout only handles
   // disconnecting nodes that are already silent.
@@ -271,17 +271,20 @@ function stopVoicesAt(voiceList, when) {
   const ms = Math.max(0, (when - audioCtx.currentTime) * 1000) + 50;
   setTimeout(() => {
     for (const v of voiceList) destroyVoice(v);
+    for (const n of extraNodes || []) { try { n.disconnect(); } catch(e) {} }
     releasing.delete(voiceList);
   }, ms);
 }
 
-function releaseVoices(voiceList, fadeTime) {
+// Release a whole note: fade the note's OWN gain, leaving notes that started
+// later (or are still fading) completely untouched — envelopes don't share.
+function releaseVoices(voiceList, fadeTime, gain) {
   const now = audioCtx.currentTime;
-  const g = masterGain.gain;
+  const g = gain.gain;
   g.cancelScheduledValues(now);
   g.setValueAtTime(g.value, now);
   g.linearRampToValueAtTime(0, now + fadeTime);
-  stopVoicesAt(voiceList, now + fadeTime);
+  stopVoicesAt(voiceList, now + fadeTime, [gain]);
 }
 
 function vectorKey(v) {
@@ -346,27 +349,18 @@ function startTone() {
   const perVoiceVolume = VOLUME / voicing.length;
 
   const now = audioCtx.currentTime;
-  const g = masterGain.gain;
 
-  // Steal any voices still fading out from a previous note: ramping the
-  // shared master gain back up would make them audible again until their
-  // scheduled stop — a hard stop at audible gain clicks.
-  if (voices.length > 0) releasing.add(voices);
-  voices = [];
-  for (const fading of [...releasing]) {
-    stopVoicesAt(fading, now + QUICK_FADE);
-  }
-
-  // ADSR on master gain: quick dip to silence (kills any stolen voices),
-  // then attack/decay from the current gain value — never a hard jump.
-  g.cancelScheduledValues(now);
-  g.setValueAtTime(g.value, now);
-  g.linearRampToValueAtTime(0, now + QUICK_FADE);
-  g.linearRampToValueAtTime(perVoiceVolume, now + QUICK_FADE + envelope.attack);
+  // Each note gets its own gain node: attacks and releases are private, so
+  // a re-attack never steals from — or clicks through — a note still fading.
+  noteGain = audioCtx.createGain();
+  noteGain.connect(masterGain);
+  const g = noteGain.gain;
+  g.setValueAtTime(0, now);
+  g.linearRampToValueAtTime(perVoiceVolume, now + envelope.attack);
   g.linearRampToValueAtTime(perVoiceVolume * envelope.sustain,
-    now + QUICK_FADE + envelope.attack + envelope.decay);
+    now + envelope.attack + envelope.decay);
 
-  voices = voicing.map(s => createVoice(s.freq, s.key));
+  voices = voicing.map(s => createVoice(s.freq, s.key, noteGain));
 
   isSounding = true;
   stateDisplay.textContent = 'sounding';
@@ -376,8 +370,9 @@ function startTone() {
 function stopTone() {
   if (!isSounding) return;
 
-  releaseVoices(voices, envelope.release);
+  releaseVoices(voices, envelope.release, noteGain);
   voices = [];
+  noteGain = null;
   isSounding = false;
   stateDisplay.textContent = 'idle';
   stateDisplay.classList.remove('sounding');
@@ -411,7 +406,7 @@ function updateFrequencyIfSounding() {
   const added = [];
   for (const s of voicing) {
     if (haveKeys.has(s.key)) continue;
-    const v = createVoice(s.freq, s.key);
+    const v = createVoice(s.freq, s.key, noteGain);
     const vg = v.voiceGain.gain;
     vg.setValueAtTime(0, now);
     vg.linearRampToValueAtTime(1, now + Math.max(envelope.attack, VOICE_FADE));
@@ -423,7 +418,7 @@ function updateFrequencyIfSounding() {
   // Keep total loudness steady as the voice count changes
   if (dying.length > 0 || added.length > 0) {
     const level = (VOLUME / voices.length) * envelope.sustain;
-    const g = masterGain.gain;
+    const g = noteGain.gain;
     g.cancelScheduledValues(now);
     g.setValueAtTime(g.value, now);
     g.linearRampToValueAtTime(level, now + VOICE_FADE);
@@ -1449,6 +1444,6 @@ setupSliders();
 setupRootControl();
 setupBodyControl();
 setupSessionControls();
-console.log('prime drifter organ — build: scores with sethz (e765474)');
+console.log('prime drifter organ — build: per-note envelope gains (pop-free re-attack)');
 updateDisplay();
 requestAnimationFrame(overtoneLoop);
