@@ -1200,6 +1200,14 @@ function setStatus(msg) {
   pbStatusEl.textContent = msg;
 }
 
+// Brief override so events with no visible effect (like sethz to the value
+// the instrument already holds) still announce themselves.
+let statusFlashUntil = 0;
+function setStatusFlash(msg) {
+  setStatus(msg);
+  statusFlashUntil = performance.now() + 800;
+}
+
 function fakeKey(code) {
   return { code, repeat: false, preventDefault() {} };
 }
@@ -1212,9 +1220,11 @@ function recordKeyEvent(e, down) {
 }
 
 // Slider moves are captured too (coalesced): a recording that retunes the
-// instrument replays the retune. forced=true flushes the exact final value.
+// instrument replays the retune. forced=true flushes the exact final value,
+// but only if the slider was actually moved during the take.
 function recordBaseHz(forced) {
   if (!recEvents || playing) return;
+  if (forced && lastRecHz === null) return;
   if (!forced && lastRecHz !== null && Math.abs(baseHz - lastRecHz) / lastRecHz < 0.005) return;
   if (lastRecHz !== null && Math.abs(baseHz - lastRecHz) < 1e-9) return;
   lastRecHz = baseHz;
@@ -1279,6 +1289,7 @@ function resetInstrument() {
   if (holdMode) toggleHold();
   if (invertedMode) toggleInvert();
   updateFrequencyIfSounding();
+  setStatusFlash('reset — root home, voicing and modes clear');
 }
 
 function startPlayback() {
@@ -1313,6 +1324,7 @@ function dispatchScoreEvent(ev) {
   playNowMs = ev.t;
   if (ev.type === 'sethz') {
     setBaseHz(ev.hz);
+    setStatusFlash(`sethz → ${ev.hz.toFixed(1)} Hz ≈ ${approxNoteName(ev.hz)}`);
     return;
   }
   if (ev.down) {
@@ -1373,6 +1385,7 @@ function saveScore() {
 // Called from the animation loop so counters tick live.
 function updateSessionStatus() {
   if (!pbStatusEl) return;
+  if (performance.now() < statusFlashUntil) return;
   if (recEvents) {
     setStatus(`● ${((performance.now() - recStartMs) / 1000).toFixed(1)}s · ${recEvents.length} events`);
   } else if (playing) {
