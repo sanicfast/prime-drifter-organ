@@ -204,7 +204,13 @@ function createVoice(freq, key, dest) {
 
   // Per-voice gain: lets a single voice fade in/out while the note is held
   const voiceGain = audioCtx.createGain();
-  voiceGain.gain.value = 1;
+  // Loudness compensation across pitch: at equal voltage a voice at 55 Hz
+  // sounds a good deal quieter than one at 880 Hz (equal-loudness law, plus
+  // small speakers' bass roll-off, plus the harmonic stack landing in the
+  // ear's sensitive 2-5kHz zone up high). Pre-invert roughly: gentle tilt,
+  // +6dB at the bottom, -3dB at the top, so the whole fold range feels even.
+  const loud = Math.min(2.0, Math.max(0.6, Math.cbrt(620 / freq)));
+  voiceGain.gain.value = loud;
   voiceGain.connect(dest);
   nodes.push(voiceGain);
 
@@ -243,7 +249,10 @@ function createVoice(freq, key, dest) {
   bpFilter.frequency.value = freq;
   bpFilter.Q.value = 2;
   const noiseGain = audioCtx.createGain();
-  noiseGain.gain.value = 0.04;
+  // The Q=2 bandpass passes noise POWER in proportion to its bandwidth,
+  // which grows with center frequency: +3dB per octave of "hiss" if left
+  // flat. Scale by 1/sqrt(f) so breath is perceived steady across the range.
+  noiseGain.gain.value = 0.04 * Math.min(1.6, Math.max(0.5, Math.sqrt(620 / freq)));
   noiseSrc.connect(bpFilter);
   bpFilter.connect(noiseGain);
   noiseGain.connect(voiceGain);
@@ -258,7 +267,10 @@ function createVoice(freq, key, dest) {
   chiffFilter.type = 'highpass';
   chiffFilter.frequency.value = freq * 2.5;
   const chiffGain = audioCtx.createGain();
-  chiffGain.gain.setValueAtTime(0.12, startAt);
+  // A highpass at 2.5f passes the ear's sensitive zone for LOW notes and a
+  // dull ultrasonic sliver for high ones; level the perceived chiff a touch.
+  const chiffLvl = 0.12 * Math.min(1.25, Math.max(0.75, Math.pow(500 / (freq * 2.5), 0.15)));
+  chiffGain.gain.setValueAtTime(chiffLvl, startAt);
   chiffGain.gain.exponentialRampToValueAtTime(0.001, startAt + 0.06);
   chiffSrc.connect(chiffFilter);
   chiffFilter.connect(chiffGain);
@@ -270,7 +282,7 @@ function createVoice(freq, key, dest) {
   return {
     oscs: [osc1, osc2, ...partials.map(p => p.osc)],
     extra: [noiseSrc, chiffSrc],
-    nodes, voiceGain, partials, freq, key,
+    nodes, voiceGain, partials, freq, key, loud,
   };
 }
 
@@ -457,7 +469,7 @@ function updateFrequencyIfSounding() {
     const v = createVoice(s.freq, s.key, noteGain);
     const vg = v.voiceGain.gain;
     vg.setValueAtTime(0, now);
-    vg.linearRampToValueAtTime(1, now + Math.max(envelope.attack, VOICE_FADE));
+    vg.linearRampToValueAtTime(v.loud, now + Math.max(envelope.attack, VOICE_FADE));
     added.push({ voice: v, freq: s.freq });
   }
 
@@ -1498,6 +1510,6 @@ setupSliders();
 setupRootControl();
 setupBodyControl();
 setupSessionControls();
-console.log('prime drifter organ — build: decorrelated voice starts');
+console.log('prime drifter organ — build: pitch-even loudness');
 updateDisplay();
 requestAnimationFrame(overtoneLoop);
