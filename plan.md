@@ -237,17 +237,32 @@ grades everything against the tonic.
 
 ---
 
-## Step 15 — Recording & Playback
+## Step 15 — Playback: the score system (shipped)
 
-**Goal:** Capture and replay performances.
+**Goal:** Let the organ read and play music — in its own language.
 
-- Record mode: log (timestamp_ms, action_type, key) for every interaction
-- Export as JSON file (download via Blob + anchor click)
-- Import JSON → replay actions at recorded timing
-- Store initial Hz in JSON header
-- Basic playback controls (play, stop)
+The score is the instrument's native notation: timestamped keystroke
+choreography. What the recorder writes is exactly what the player reads.
 
-**Test:** Record a short session, export, reload page, import, replay sounds identical.
+- **Score format** (text, one event per line): `<time> <key>+` press,
+  `<key>-` release, bare `<key>` tap; bare numbers anchor time, `+0.25`
+  advances it; `#` comments. Friendly tokens mirror the keyboard
+  (`space`, letters, `;` `'` `,` `.` `/` `del`); digit keys need `+/-`
+  since bare digits are times. Parse + format live in prime-vector.js as
+  pure functions (22 regression tests).
+- **Record**: keystrokes captured with timestamps; stopping writes the
+  score into the editor (leading comment headers survive the rewrite).
+- **Play**: re-dispatches recorded events through the real key handlers —
+  every mode, glide, and voice-diff subtlety applies to playback exactly as
+  to live playing, and live keystrokes can be layered over playback.
+- **Transport**: rec / play / stop (stop releases held events, clears
+  voicing, kills pending timers), loop toggle, live time/event counters.
+  Escape stops playback. Hidden tabs stop instead of avalanche-replaying.
+- The score editor persists to localStorage; first run is seeded with the
+  opening of "Somewhere over the rainbow" (anchored-on-do version).
+
+**Test:** score utilities under the regression suite; seed score parses to
+13 events and round-trips through format unchanged.
 
 ---
 

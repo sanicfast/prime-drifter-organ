@@ -819,6 +819,7 @@ function drawOvertoneView() {
 
 function overtoneLoop() {
   drawOvertoneView();
+  updateSessionStatus();
   requestAnimationFrame(overtoneLoop);
 }
 
@@ -928,6 +929,10 @@ function clearVoicing() {
 }
 
 function handleKeyDown(e) {
+  // Keys typed into the score editor are text, not a performance:
+  // typing "h" in the score must not sound an H chord.
+  if (e.target && e.target.tagName === 'TEXTAREA') return;
+
   // Always suppress space's default (page scroll / activating a focused
   // control) — including auto-repeat events, which bail out below.
   // Without this, holding space long enough starts page-downing the app.
@@ -935,9 +940,12 @@ function handleKeyDown(e) {
 
   if (e.repeat) return;
 
+  recordKeyEvent(e, true);
+
   if (e.code === 'Escape') {
     e.preventDefault();
     toggleOverlay(false);
+    stopPlayback();
     return;
   }
 
@@ -1086,6 +1094,10 @@ function handleKeyDown(e) {
 }
 
 function handleKeyUp(e) {
+  if (e.target && e.target.tagName === 'TEXTAREA') return;
+
+  recordKeyEvent(e, false);
+
   if (holdMode && CHORD_PRESETS[e.code]) {
     releaseHeldChord(e.code);
   } else if (holdMode && ADDITIVE_RATIOS[e.code]) {
@@ -1132,10 +1144,209 @@ document.addEventListener('pointerdown', (e) => {
 document.addEventListener('pointerup', releaseMouseKey);
 document.addEventListener('pointercancel', releaseMouseKey);
 
+// === Session: Record & Playback ===
+
+// The score is the instrument's own choreography: timestamped keystrokes,
+// recorded from play or hand-written, and replayed by re-dispatching the
+// events through the very same handlers the keyboard and cheatsheet clicks
+// use. What the organ writes is what it reads.
+
+const SCORE_STORAGE_KEY = 'prime-drifter-score';
+
+const SCORE_HELP = '# score: bare number sets the time in seconds, "+0.25" advances it\n' +
+  '# <key>+ press · <key>- release · bare <key> quick tap · # comment\n' +
+  '# keys: space 0-5 letters ; \' , . / \\ del  (digit keys always need + or -)';
+
+const SCORE_SEED = SCORE_HELP + '\n\n' +
+  '# "Somewhere, over the rainbow" — the opening, anchored on do\n' +
+  '0.00 .            # hum on: the drone is the tonic\n' +
+  '0.00 space+\n' +
+  '0.55 1+           # "Some—where" — that octave, gliding\n' +
+  '1.15 g+           # "there\'s"   ti  15:8\n' +
+  '1.75 b+           # "a place"   la  5:3\n' +
+  '2.35 v+           # "I heard"   sol 3:2\n' +
+  '2.95 b+           # "of"        fa  4:3\n' +
+  '3.55 g+           # "a"         mi  5:4\n' +
+  '4.40 1-\n' +
+  '4.45 space-\n' +
+  '4.55 .            # hum off\n';
+
+let scoreEl, pbStatusEl, recBtn, playBtn, stopBtn, pbLoopEl;
+let recEvents = null;    // array of events while recording, else null
+let recStartMs = 0;
+let playing = false;
+let playTimers = [];
+let pressedCodes = null; // codes played down by playback, not yet released
+let playTotalMs = 0;
+let playNowMs = 0;
+
+function setStatus(msg) {
+  pbStatusEl.textContent = msg;
+}
+
+function fakeKey(code) {
+  return { code, repeat: false, preventDefault() {} };
+}
+
+function recordKeyEvent(e, down) {
+  if (!recEvents || playing) return;
+  if (e.key === '?') return;          // the field guide is not part of the music
+  if (!scoreTokenFor(e.code)) return; // only the instrument's own keys
+  recEvents.push({ t: Math.round(performance.now() - recStartMs), code: e.code, down });
+}
+
+function startRecording() {
+  stopPlayback();
+  recStartMs = performance.now();
+  recEvents = [];
+  recBtn.classList.add('recording');
+  recBtn.textContent = '■ stop';
+}
+
+function stopRecording() {
+  if (!recEvents) return;
+  const events = recEvents;
+  recEvents = null;
+  recBtn.classList.remove('recording');
+  recBtn.textContent = '● rec';
+  writeScore(events);
+  setStatus(`recorded ${events.length} events — edit the score, press play`);
+}
+
+// Replace the score body with a recording, keeping any leading comment header.
+function writeScore(events) {
+  const header = [];
+  for (const line of scoreEl.value.split('\n')) {
+    const t = line.trim();
+    if (t === '' || t.startsWith('#')) header.push(line);
+    else break;
+  }
+  scoreEl.value = `${header.join('\n').trim() || SCORE_HELP}\n\n${formatScore(events)}`;
+  saveScore();
+}
+
+function startPlayback() {
+  if (recEvents) stopRecording();
+  stopPlayback();
+  const { events, errors } = parseScore(scoreEl.value);
+  if (errors.length) {
+    setStatus(`score error — ${errors[0].msg} (line ${errors[0].line})`);
+    return;
+  }
+  if (events.length === 0) {
+    setStatus('nothing to play');
+    return;
+  }
+  playing = true;
+  pressedCodes = new Set();
+  playTotalMs = events[events.length - 1].t;
+  playNowMs = 0;
+  playBtn.classList.add('playing');
+  playBtn.textContent = '▶ playing';
+  saveScore();
+  events.forEach((ev, i) => {
+    playTimers.push(setTimeout(() => {
+      dispatchScoreEvent(ev);
+      if (i === events.length - 1) finishPlayback();
+    }, ev.t));
+  });
+}
+
+function dispatchScoreEvent(ev) {
+  playNowMs = ev.t;
+  if (ev.down) {
+    pressedCodes.add(ev.code);
+    handleKeyDown(fakeKey(ev.code));
+  } else {
+    pressedCodes.delete(ev.code);
+    handleKeyUp(fakeKey(ev.code));
+  }
+}
+
+function finishPlayback() {
+  playing = false;
+  playTimers = [];
+  pressedCodes = null;
+  playBtn.classList.remove('playing');
+  playBtn.textContent = '▶ play';
+  clearStaleHighlights();
+  setStatus('played');
+  if (pbLoopEl.checked) startPlayback();
+}
+
+// Manual stop: kill pending events, let go of everything playback held, silence.
+function stopPlayback() {
+  playTimers.forEach(clearTimeout);
+  playTimers = [];
+  const wasPlaying = playing;
+  playing = false;
+  playBtn.classList.remove('playing');
+  playBtn.textContent = '▶ play';
+  if (!wasPlaying) return;
+  if (pressedCodes) {
+    for (const code of pressedCodes) handleKeyUp(fakeKey(code));
+    pressedCodes = null;
+  }
+  if (isSounding) handleKeyUp(fakeKey('Space'));
+  if (activeChord || activeAdditives.size > 0) {
+    clearVoicing();
+    updateDisplay();
+    updateFrequencyIfSounding();
+  }
+  clearStaleHighlights();
+  setStatus('stopped');
+}
+
+function clearStaleHighlights() {
+  for (const el of document.querySelectorAll('.cheat-key.active')) {
+    const code = el.dataset.key;
+    if (MODE_KEYS.has(code) || code === activeChord || activeAdditives.has(code)) continue;
+    el.classList.remove('active');
+  }
+}
+
+function saveScore() {
+  try { localStorage.setItem(SCORE_STORAGE_KEY, scoreEl.value); } catch (err) { /* private mode */ }
+}
+
+// Called from the animation loop so counters tick live.
+function updateSessionStatus() {
+  if (!pbStatusEl) return;
+  if (recEvents) {
+    setStatus(`● ${((performance.now() - recStartMs) / 1000).toFixed(1)}s · ${recEvents.length} events`);
+  } else if (playing) {
+    setStatus(`▶ ${(playNowMs / 1000).toFixed(1)} / ${(playTotalMs / 1000).toFixed(1)}s`);
+  }
+}
+
+function setupSessionControls() {
+  scoreEl = document.getElementById('pb-score');
+  pbStatusEl = document.getElementById('pb-status');
+  recBtn = document.getElementById('pb-rec');
+  playBtn = document.getElementById('pb-play');
+  stopBtn = document.getElementById('pb-stop');
+  pbLoopEl = document.getElementById('pb-loop');
+
+  let saved = null;
+  try { saved = localStorage.getItem(SCORE_STORAGE_KEY); } catch (err) { /* private mode */ }
+  scoreEl.value = saved && saved.trim() ? saved : SCORE_SEED;
+
+  scoreEl.addEventListener('input', saveScore);
+  recBtn.addEventListener('click', () => (recEvents ? stopRecording() : startRecording()));
+  playBtn.addEventListener('click', () => (playing ? stopPlayback() : startPlayback()));
+  stopBtn.addEventListener('click', () => { stopRecording(); stopPlayback(); });
+
+  // Background tabs throttle timers; don't let a hidden tab avalanche on return.
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) stopPlayback();
+  });
+}
+
 // === Init ===
 
 setupSliders();
 setupRootControl();
 setupBodyControl();
+setupSessionControls();
 updateDisplay();
 requestAnimationFrame(overtoneLoop);

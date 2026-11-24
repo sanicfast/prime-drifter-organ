@@ -164,6 +164,72 @@ for (const f of [33, 123.4, 567, 999, 3210]) {
     `${f} -> ${folded} out of range`);
 }
 
+// === Test Suite: Score Format ===
+
+// Token resolution
+assert('score: space token', resolveScoreCode('space') === 'Space');
+assert('score: digit token', resolveScoreCode('5') === 'Digit5');
+assert('score: punctuation tokens',
+  resolveScoreCode(';') === 'Semicolon' && resolveScoreCode("'") === 'Quote' &&
+  resolveScoreCode(',') === 'Comma' && resolveScoreCode('.') === 'Period' &&
+  resolveScoreCode('/') === 'Slash' && resolveScoreCode('\\') === 'Backslash');
+assert('score: del token', resolveScoreCode('del') === 'Backspace');
+assert('score: raw codes accepted', resolveScoreCode('keyG') === 'KeyG' && resolveScoreCode('SPACE') === 'Space');
+assert('score: junk rejected', resolveScoreCode('bogus') === null);
+assert('score: every code round-trips its token',
+  Object.keys(SCORE_TOKENS).every(c => resolveScoreCode(SCORE_TOKENS[c]) === c));
+
+// Basic parse
+{
+  const { events, errors } = parseScore('0.5 space+\n1.25 space-');
+  assert('parse: no errors', errors.length === 0);
+  assert('parse: two events', events.length === 2);
+  assert('parse: times in ms', events[0].t === 500 && events[1].t === 1250);
+  assert('parse: down flags', events[0].down === true && events[1].down === false);
+}
+
+// Bare token = tap (press + delayed release)
+{
+  const { events } = parseScore('1.0 h');
+  assert('parse: tap expands to pair', events.length === 2 && events[0].down === true && events[1].down === false);
+  assert('parse: tap gap', events[1].t - events[0].t === TAP_GAP_MS);
+}
+
+// Relative time, re-anchoring, and simultaneous events
+{
+  const { events } = parseScore('1.00 1+\n+0.5 1-\n0.25 space+ h+');
+  assert('parse: relative advance', events.some(e => e.code === 'Digit1' && !e.down && e.t === 1500));
+  assert('parse: absolute re-anchor', events.some(e => e.code === 'Space' && e.down && e.t === 250));
+  assert('parse: simultaneous group', events.some(e => e.code === 'KeyH' && e.down && e.t === 250));
+  assert('parse: ties keep written order',
+    events.findIndex(e => e.code === 'Space') < events.findIndex(e => e.code === 'KeyH'));
+}
+
+// Comments and error reporting
+{
+  const { events, errors } = parseScore('# header\n0.5 g   # glide\n\nbogus+');
+  assert('parse: comments ignored', events.length === 2 && events[0].code === 'KeyG');
+  assert('parse: error line reported', errors.length === 1 && errors[0].line === 4);
+}
+
+// Bare numbers are time anchors, so 0-5 keys always need a +/- suffix
+{
+  const { events, errors } = parseScore('1.0 1');
+  assert('parse: bare digit anchors time', events.length === 0 && errors.length === 0);
+}
+
+// Format then parse: identical event stream
+{
+  const src = parseScore('0 space+ 0+\n0.03 0-\n0.55 1+\n1.15 g+\n2.0 space-\n2.1 .');
+  const rt = parseScore(formatScore(src.events));
+  assert('roundtrip: same count', rt.events.length === src.events.length);
+  assert('roundtrip: events equal', rt.errors.length === 0 &&
+    rt.events.every((e, i) => {
+      const o = src.events[i];
+      return e.t === o.t && e.code === o.code && e.down === o.down;
+    }));
+}
+
 // === Render Results ===
 
 const resultsEl = document.getElementById('results');

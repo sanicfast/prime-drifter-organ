@@ -229,6 +229,79 @@ kbd {
   line-height: 1.5;
 }
 
+/* === Playback panel === */
+
+.pb-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.6rem;
+}
+
+.pb-btn {
+  background: #14141f;
+  border: 1px solid #2c2c44;
+  border-radius: 6px;
+  color: #aab;
+  font-family: inherit;
+  font-size: 0.7rem;
+  padding: 0.32rem 0.75rem;
+  cursor: pointer;
+}
+
+.pb-btn:hover {
+  border-color: #4a4a70;
+  color: #dde;
+}
+
+.pb-btn.recording {
+  color: #ff7b7b;
+  border-color: #7b3040;
+  animation: pb-pulse 1s ease-in-out infinite;
+}
+
+.pb-btn.playing {
+  color: #7fdbca;
+  border-color: #2c5a52;
+}
+
+@keyframes pb-pulse {
+  50% { opacity: 0.55; }
+}
+
+.pb-loop {
+  font-size: 0.65rem;
+  color: #888;
+  cursor: pointer;
+}
+
+#pb-status {
+  font-size: 0.62rem;
+  color: #667;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+#pb-score {
+  width: 100%;
+  background: #10101a;
+  border: 1px solid #23233a;
+  border-radius: 6px;
+  color: #9ad0c8;
+  font-family: 'Courier New', monospace;
+  font-size: 0.68rem;
+  line-height: 1.55;
+  padding: 0.55rem 0.7rem;
+  resize: vertical;
+  text-align: left;
+}
+
+#pb-score:focus {
+  outline: none;
+  border-color: #3d5a75;
+}
+
 .root-row span {
   font-size: 0.8rem;
   color: #7fdbca;

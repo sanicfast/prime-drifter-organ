@@ -171,6 +171,20 @@
         </div>
       </div>
     </div>
+
+    <div class="envelope">
+      <div class="env-title">playback</div>
+      <div class="pb-row">
+        <button id="pb-rec" class="pb-btn" data-tip="record your keystrokes; recording replaces the score below">● rec</button>
+        <button id="pb-play" class="pb-btn" data-tip="play the score below, exactly as written">▶ play</button>
+        <button id="pb-stop" class="pb-btn" data-tip="stop playback and let go of everything">■ stop</button>
+        <label class="pb-loop"><input type="checkbox" id="pb-loop"> loop</label>
+        <span id="pb-status">idle</span>
+      </div>
+      <textarea id="pb-score" rows="9" spellcheck="false" autocomplete="off"></textarea>
+      <div class="hv-caption">the score is keystroke choreography — the organ reads exactly what it records.
+      edit by hand to write music; it is saved in this browser. keys mirror the cheat sheet above.</div>
+    </div>
   </div>
 
   <div id="overlay" class="overlay hidden">
@@ -234,6 +248,9 @@
           and mistunings buzz — the partials are what the tuning acts through.
           Watch the <b>overtones</b> panel while you play it: gold dots are
           partials landing dead-on, red ✕ are the near-misses that buzz.</p>
+          <p>the <b>playback</b> panel records your keystrokes as an editable
+          text score — and plays any score back through the very same keys.
+          The organ writes its own sheet music; edit the score to compose.</p>
         </section>
 
         <section>

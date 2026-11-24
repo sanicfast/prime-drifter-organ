@@ -175,3 +175,109 @@ const VOICE_LABELS = {
   '-1,0,0,0': '1:2',
   '1,0,-1,0': '2:5',
 };
+
+// === Score Format ===
+// The instrument's native notation is its own keystroke choreography: a list
+// of timestamped key presses and releases. Recorded and hand-written scores
+// share this format, and playback just replays events through the key
+// handlers — so the organ "reads" exactly what it "writes". Pure string
+// handling lives here so it stays testable without a browser.
+//
+// Line format:  <time> <token><+|->        time: seconds, or +delta
+//               bare token = quick tap (press + release)
+//               '#' anywhere on a line starts a comment
+//
+//   0.00 space+ 0        hold space, snap home
+//   0.45 1               glide up an octave ("Some—where")
+//   1.05 g               ti, a pure 15:16 down
+//   4.35 space-
+//
+// Note: bare numbers are times, so the 0-5 keys always need a +/- suffix.
+
+const TAP_GAP_MS = 30; // bare token: press, then release after this gap
+
+// Friendly token for every playable key code (built from the tables above).
+const SCORE_TOKENS = (() => {
+  const codes = new Set([
+    'Space', 'Digit0', 'Backspace', 'Backslash',
+    'Period', 'Comma', 'Slash', 'KeyM', 'KeyN',
+    ...Object.keys(MOVES_BIG), ...Object.keys(MOVES_SMALL),
+    ...Object.keys(CHORD_PRESETS), ...Object.keys(ADDITIVE_RATIOS),
+  ]);
+  const special = {
+    'Space': 'space', 'Semicolon': ';', 'Quote': "'", 'Comma': ',',
+    'Period': '.', 'Slash': '/', 'Backslash': '\\', 'Backspace': 'del',
+  };
+  const tokens = {};
+  for (const code of codes) {
+    tokens[code] = special[code]
+      || (code.startsWith('Digit') ? code.slice(5) : code.slice(3).toLowerCase());
+  }
+  return tokens;
+})();
+
+const SCORE_CODES = Object.fromEntries(
+  Object.entries(SCORE_TOKENS).map(([code, tok]) => [tok, code])
+);
+
+function scoreTokenFor(code) {
+  return SCORE_TOKENS[code] || null;
+}
+
+// Resolve a score token to a key code; also accepts raw codes, case-free.
+function resolveScoreCode(token) {
+  if (SCORE_CODES[token]) return SCORE_CODES[token];
+  const raw = token.toLowerCase();
+  for (const code of Object.keys(SCORE_TOKENS)) {
+    if (code.toLowerCase() === raw) return code;
+  }
+  return null;
+}
+
+function parseScore(text) {
+  const events = [];
+  const errors = [];
+  let curT = 0; // ms, persists across lines until re-anchored
+  const lines = String(text).split('\n');
+
+  for (let i = 0; i < lines.length; i++) {
+    const lineNo = i + 1;
+    const tokens = lines[i].split('#')[0].trim().split(/\s+/).filter(Boolean);
+    for (const tok of tokens) {
+      if (/^\d+(\.\d+)?$/.test(tok) || /^\.\d+$/.test(tok)) {
+        curT = Math.round(parseFloat(tok) * 1000);
+        continue;
+      }
+      if (/^\+\d*\.?\d+$/.test(tok)) {
+        curT += Math.round(parseFloat(tok.slice(1)) * 1000);
+        continue;
+      }
+      const last = tok[tok.length - 1];
+      let down = null;
+      if (last === '+') down = true;
+      else if (last === '-') down = false;
+      const code = last === '+' || last === '-'
+        ? resolveScoreCode(tok.slice(0, -1))
+        : resolveScoreCode(tok);
+      if (!code) {
+        errors.push({ line: lineNo, msg: `unknown token "${tok}"` });
+        continue;
+      }
+      if (down === null) { // tap: press now, release a beat later
+        events.push({ t: curT, code, down: true, line: lineNo });
+        events.push({ t: curT + TAP_GAP_MS, code, down: false, line: lineNo });
+      } else {
+        events.push({ t: curT, code, down, line: lineNo });
+      }
+    }
+  }
+  events.sort((a, b) => a.t - b.t); // sort is stable: simultaneous events keep order
+  return { events, errors };
+}
+
+function formatScore(events) {
+  return events
+    .map(ev => `${(ev.t / 1000).toFixed(2)} ${scoreTokenFor(ev.code)}${ev.down ? '+' : '-'}`)
+    .join('\n');
+}
+
