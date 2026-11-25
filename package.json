@@ -1,0 +1,11 @@
+{
+  "name": "prime-drifter-organ",
+  "private": true,
+  "description": "tooling only — the organ itself is plain scripts, no build",
+  "scripts": {
+    "test:clicks": "node click-test.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.65.1"
+  }
+}

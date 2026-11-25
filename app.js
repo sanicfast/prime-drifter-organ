@@ -10,8 +10,14 @@ let masterVolume = 1;      // output level — a setting like the envelope: neve
 const HUM_VOLUME = 0.05;
 const HUM_FADE = 0.4;
 const VOICE_FADE = 0.06; // crossfade time for voices joining/leaving a held chord
-const TAIL_TRIM = 0.05;  // exponential fade used to trim over-budget tails
+const TAIL_TRIM = 0.05;  // linear fade used to trim over-budget tails
 const TAIL_BUDGET = 0.55; // summed note-gain ceiling before the mix strains
+// New-note envelopes start this far ahead of ctx.currentTime: the render
+// thread runs ahead of what the main thread can observe (>=1 block, more
+// under load); anchoring an attack in that blind past makes it commit
+// midway through its own ramp — a phantom step that pop-probe caught as
+// corroborated full-voice clicks exactly one block after startTone.
+const LOOKAHEAD = 0.012;
 
 let body = 0.6; // timbre: weight of the upper harmonic stack (0 = airy sine only)
 
@@ -176,18 +182,57 @@ function getAudibleFreq() {
 // Adds the upper harmonic stack (×3 ×4 ×5 ×7) to a destination voice chain
 function addHarmonics(freq, dest, startAt) {
   const partials = [];
+  // WARM RULE (see makeChainSegment): body changes later fire setTarget on
+  // these gains while the partial is at full amplitude — cache-cold under
+  // signal again. Touch each once now; the partials' oscillators only start
+  // at startAt, so nothing can flow while the cache materializes.
+  const warmAt = warmBlock();
   for (const { mult, mix } of PARTIAL_MIX) {
     const osc = audioCtx.createOscillator();
     osc.type = 'sine';
     osc.frequency.value = freq * mult;
     const gain = audioCtx.createGain();
     gain.gain.value = mix * body;
+    gain.gain.setValueAtTime(mix * body, warmAt);
     osc.connect(gain);
     gain.connect(dest);
     osc.start(startAt);
     partials.push({ osc, gain, mult, mix });
   }
   return partials;
+}
+
+// Render-quantum alignment for AudioParam event times. Safari field capture
+// (v8.2): every CLICK (15/15) landed within one block of a segment junction
+// whose event time fell mid-block in a live param's timeline — the Δ equalled
+// the param's live value and the waveform carried a one-sample slot or step
+// there (e.g. CLICK @61.902 == chiff lin-end event @61.902). Params whose
+// events ride the block-aligned `now` (slots, fin, fout, note envelopes at
+// their birth) produced zero flags across every log. So: NO event boundary
+// mid-block. Chromium renders both ways identically; Safari only caches the
+// grid cleanly. Ceil (never floor) keeps every event at-or-after `now` even
+// when the clock advanced during voice creation.
+function Q() { return 128 / audioCtx.sampleRate; } // one render quantum
+
+function qa(t) {
+  // -1e-9: a clock value with float drift one ulp past a boundary (or a sim
+  // clock at 1.5400000000000002) must land ON that boundary, not one block
+  // late.
+  return Math.ceil(t / Q() - 1e-9) * Q();
+}
+
+// WARM RULE (see makeChainSegment) pin time: the START of the PREVIOUS render
+// block. The warm pin must be strictly older than every real event the engine
+// ever schedules on the param — those all anchor at >= currentTime — so it can
+// never out-order or clobber an envelope. A NEXT-block pin did exactly that:
+// qa(now+Q) landed after the same-task raw-currentTime fade-in and punched the
+// whole attack out of the timeline (click-test caught it as a level jump equal
+// to the voice level). Being block-aligned and value-equal, a past pin is a
+// provably no-op timeline segment — silent x guess = silent — yet it is still
+// a timeline segment, which is what materializes Safari's cold cache before
+// the param's first real event ever fires.
+function warmBlock() {
+  return qa(Math.max(audioCtx.currentTime - Q(), 0));
 }
 
 function createVoice(freq, key, dest) {
@@ -202,6 +247,14 @@ function createVoice(freq, key, dest) {
   // makes separate notes add as independent waves, not one doubled wave.
   const startAt = now + 0.001 + Math.random() * 0.002;
   const noiseAt = () => Math.random() * (noiseBuffer.duration - 0.5);
+  // Never schedule in the past, and never mid-block: startAt is captured
+  // BEFORE the ~30 nodes of this voice are created, and on Safari the clock
+  // advances during that long task (v8.2: the stale anchor was ~1ms old at
+  // schedule time). qa() clamps forward AND lands every noise envelope edge
+  // on a block start (see qa above — the chiff junction was the click site).
+  // Oscillators keep raw startAt: they begin at phase 0 = value 0 = smooth
+  // whenever they hit, and their timing is not a param timeline.
+  const liveStart = () => qa(Math.max(startAt, audioCtx.currentTime));
 
   // Per-voice gain: lets a single voice fade in/out while the note is held
   const voiceGain = audioCtx.createGain();
@@ -212,13 +265,34 @@ function createVoice(freq, key, dest) {
   // +6dB at the bottom, -3dB at the top, so the whole fold range feels even.
   const loud = Math.min(2.0, Math.max(0.6, Math.cbrt(620 / freq)));
   voiceGain.gain.value = loud;
-  voiceGain.connect(dest);
-  nodes.push(voiceGain);
+  // Born wired into its own two dormant fade slots (WEBKIT RULE): fin fires
+  // once iff the voice is ADDED mid-note, fout once iff it DIES mid-note; a
+  // voice born and dying with its note never sees an event here. Unity value
+  // and no events = transparent, so the pre-wiring costs nothing and lets
+  // every fade be a first-ever event instead of an edge swap.
+  const fin = audioCtx.createGain();
+  fin.gain.value = 1;
+  const fout = audioCtx.createGain();
+  fout.gain.value = 1;
+  // WARM RULE (see makeChainSegment): fin/fout's first-ever events fire
+  // mid-note (fade-in on revoice add, fade-out on release) — under full
+  // signal, on cache-cold params: exactly the fireSlot family the v8.4
+  // capture caught. Touch both NOW, while this voice's oscillators have not
+  // even started (they start at startAt, LOOKAHEAD ahead) — silent x guess =
+  // silent.
+  const warmAt = warmBlock();
+  fin.gain.setValueAtTime(1, warmAt);
+  fout.gain.setValueAtTime(1, warmAt);
+  voiceGain.connect(fin);
+  fin.connect(fout);
+  fout.connect(dest);
+  nodes.push(voiceGain, fin, fout);
 
   // Fundamental
   const osc1 = audioCtx.createOscillator();
   osc1.type = 'sine';
   osc1.frequency.value = freq;
+  osc1.frequency.setValueAtTime(freq, warmAt); // WARM RULE: glide targets it live
   const gain1 = audioCtx.createGain();
   gain1.gain.value = 1.0;
   osc1.connect(gain1);
@@ -230,6 +304,7 @@ function createVoice(freq, key, dest) {
   const osc2 = audioCtx.createOscillator();
   osc2.type = 'sine';
   osc2.frequency.value = freq * 2;
+  osc2.frequency.setValueAtTime(freq * 2, warmAt);
   const gain2 = audioCtx.createGain();
   gain2.gain.value = 0.12;
   osc2.connect(gain2);
@@ -253,37 +328,79 @@ function createVoice(freq, key, dest) {
   // The Q=2 bandpass passes noise POWER in proportion to its bandwidth,
   // which grows with center frequency: +3dB per octave of "hiss" if left
   // flat. Scale by 1/sqrt(f) so breath is perceived steady across the range.
-  noiseGain.gain.value = 0.04 * Math.min(1.6, Math.max(0.5, Math.sqrt(620 / freq)));
+  const noiseLvl = 0.04 * Math.min(1.6, Math.max(0.5, Math.sqrt(620 / freq)));
+  // BORN SILENT. The v8.3 Safari capture finally named the family: a
+  // pre-filled noise BufferSource starting on the SAME grid boundary as its
+  // envelope's set(0) pin let one sample escape at the node's DEFAULT gain
+  // (1.0 here) — the LOOKAHEAD-blast shape, and control:blast certifies
+  // exactly it. Ordering at a shared boundary is engine-impl detail; the
+  // defense is that nothing can flow at the default: born 0, ramped up, and
+  // the source starts raw (mid-block) so it shares no boundary with any
+  // aligned param event.
+  noiseGain.gain.value = 0;
   noiseSrc.connect(bpFilter);
   bpFilter.connect(noiseGain);
   noiseGain.connect(voiceGain);
+  const nAt = liveStart();
+  noiseGain.gain.setValueAtTime(0, nAt); // first event == true value (0)
+  // Micro-step then real ramp: the breath ramp now BEGINS on its own grid
+  // boundary (nAt+one block) instead of inside the param's first block. If a
+  // renderer mis-evaluates a brand-new param's first block (see chiffAt
+  // notes), every value it can guess on that block is ~0.
+  noiseGain.gain.linearRampToValueAtTime(noiseLvl * 0.01, qa(nAt + Q()));
+  noiseGain.gain.linearRampToValueAtTime(noiseLvl, qa(nAt + 2 * Q()));
   noiseSrc.start(startAt, noiseAt());
   nodes.push(noiseSrc, bpFilter, noiseGain);
 
-  // Chiff
-  const chiffSrc = audioCtx.createBufferSource();
-  chiffSrc.buffer = noiseBuffer;
-  chiffSrc.loop = true;
-  const chiffFilter = audioCtx.createBiquadFilter();
-  chiffFilter.type = 'highpass';
-  chiffFilter.frequency.value = freq * 2.5;
-  const chiffGain = audioCtx.createGain();
-  // A highpass at 2.5f passes the ear's sensitive zone for LOW notes and a
-  // dull ultrasonic sliver for high ones; level the perceived chiff a touch.
-  const chiffLvl = 0.12 * Math.min(1.25, Math.max(0.75, Math.pow(500 / (freq * 2.5), 0.15)));
-  chiffGain.gain.setValueAtTime(chiffLvl, startAt);
-  chiffGain.gain.exponentialRampToValueAtTime(0.001, startAt + 0.06);
-  chiffSrc.connect(chiffFilter);
-  chiffFilter.connect(chiffGain);
-  chiffGain.connect(voiceGain);
-  chiffSrc.start(startAt, noiseAt());
-  chiffSrc.stop(startAt + 0.08);
-  nodes.push(chiffSrc, chiffFilter, chiffGain);
+  // Chiff — KILLED by field experiment ("kill the chiff and retest"). Three
+  // Safari captures kept the timeline right next to every click, and every
+  // defense (born-silent, 0-pin, micro-step, grid alignment, warm pins)
+  // changed nothing. Default build now contains NO chiff at all: no buffer
+  // source, no filter, no gain node, no params, no scheduled events — the
+  // cleanest acquittal the field can offer. If Safari still clicks, the chiff
+  // timeline is out for good; if it goes silent, the v8.2 Δ==chiff-level hit
+  // was real all along. `window.chiffOn = true` revives the old envelope
+  // (the console-only `chiffOff` knob is retired; the knob inverted).
+  let chiffSrc = null;
+  let chiffGain = null;
+  if (window.chiffOn === true) {
+    chiffSrc = audioCtx.createBufferSource();
+    chiffSrc.buffer = noiseBuffer;
+    chiffSrc.loop = true;
+    const chiffFilter = audioCtx.createBiquadFilter();
+    chiffFilter.type = 'highpass';
+    chiffFilter.frequency.value = freq * 2.5;
+    chiffGain = audioCtx.createGain();
+    chiffGain.gain.value = 0; // BORN SILENT — see noiseGain above; identical blast
+                               // class, and the loudest one (full-scale noise at
+                               // this node's default 1.0 was escaping for boundary
+                               // samples at chiffAt in the v8.3 capture)
+    // A highpass at 2.5f passes the ear's sensitive zone for LOW notes and a
+    // dull ultrasonic sliver for high ones; level the perceived chiff a touch.
+    const chiffLvl = 0.12 * Math.min(1.25, Math.max(0.75, Math.pow(500 / (freq * 2.5), 0.15)));
+    // Ramp in, never snap on (the buffer is full-scale noise at a random
+    // offset). set(0) pins the TRUE value (0 — born silent), so even a Safari
+    // boundary-ordering inversion yields silence, not the default 1.0. The
+    // micro-step (1% in the FIRST block, real ramp from the SECOND) keeps
+    // every possible first-block guess silent. All born of the v8.2/v8.3
+    // captures — retained verbatim for the revived path.
+    const chiffAt = liveStart();
+    chiffGain.gain.setValueAtTime(0, chiffAt);
+    chiffGain.gain.linearRampToValueAtTime(chiffLvl * 0.01, qa(chiffAt + Q()));
+    chiffGain.gain.linearRampToValueAtTime(chiffLvl, qa(chiffAt + 0.006));
+    chiffGain.gain.exponentialRampToValueAtTime(0.001, qa(chiffAt + 0.06));
+    chiffSrc.connect(chiffFilter);
+    chiffFilter.connect(chiffGain);
+    chiffGain.connect(voiceGain);
+    chiffSrc.start(chiffAt, noiseAt());
+    chiffSrc.stop(chiffAt + 0.08);
+    nodes.push(chiffSrc, chiffFilter, chiffGain);
+  }
 
   return {
     oscs: [osc1, osc2, ...partials.map(p => p.osc)],
-    extra: [noiseSrc, chiffSrc],
-    nodes, voiceGain, partials, freq, key, loud,
+    extra: chiffSrc ? [noiseSrc, chiffSrc] : [noiseSrc],
+    nodes, voiceGain, fin, fout, partials, freq, key, loud, chiffGain,
   };
 }
 
@@ -291,6 +408,105 @@ function destroyVoice(v) {
   for (const node of v.nodes) {
     try { node.disconnect(); } catch(e) {}
   }
+}
+
+// CLICK RULE (click-test.mjs + its controls, definitive): an AudioParam's
+// timeline must NEVER be modified while the param carries signal. Any
+// change — cancel-and-re-pin, past anchor, future anchor, even a
+// set-to-the-current-value — makes the renderer compute the next block's
+// FIRST sample from the param's first cached event instead of its current
+// value: a one-sample hole or bump the size of that segment. Anchoring a
+// fresh stage whose very first event pins the value it actually holds makes
+// the artifact sample CORRECT, because it is that event's value.
+// So: fades and re-levels never edit an in-flight envelope. They ride a
+// unity GainNode ("stage"); its events are scheduled once and never touched.
+// Stages multiply, so a note can carry trim, re-aim, and release stages.
+
+// WEBKIT RULE (pop-probe v7, Safari field, release at t=7.4347): a
+// disconnect+connect pair issued in ONE task can split across render quanta —
+// the removed edge goes silent on the next block while the replacing stage
+// isn't wired until the block after. The destination sees a full quantum of
+// ZERO input: 128 samples of pure silence mid-ramp (probe caught the wave
+// [-0.19 ... +0.067, then 0 0 0 0 ...]). Chromium locks the graph per quantum,
+// so the offline harness is blind to this. Therefore: NEVER swap edges while
+// signal flows.
+// Fix: every note is born wired into a chain of dormant unity slots (value 1,
+// zero events = fully transparent). Each transition consumes the next slot and
+// fires its FIRST-EVER event, pinned at the value the slot actually holds (1)
+// — clean by the CLICK RULE. Transitions become pure param events: zero
+// connect/disconnect while anything sounds. Disconnect survives only in
+// cleanup timers for nodes faded to silence, where a stray zero-input block
+// is zero x anything.
+// Churn cannot exhaust the chain: when the last fired slot is reached, a new
+// dormant segment is GROWN onto the tail (one task-local edge swap per 32
+// transitions — the only live rewiring left in the engine, logged as GROW).
+const NOTE_SLOTS = 32; // dormant slots per chain segment
+
+function makeChainSegment() {
+  const chain = [];
+  // WARM RULE (v8.5 field law): a param's FIRST-EVER event is mis-evaluated
+  // for ~one block on Safari when signal is already flowing — the v8.4 capture
+  // flagged 16/16 CLICKs at fireSlot moments (Δ scaled with the live mix and
+  // the ×mult, not with any envelope value). Dormant slots were BORN-READY but
+  // CACHE-COLD under a sounding note. So: touch every slot once at creation
+  // with a value-equal pin in the PREVIOUS block (warmBlock) — a segment the
+  // renderer has already evaluated silently while the note's own gain is
+  // pinned to 0. Whatever a renderer guesses on a cold param's first block,
+  // silent x guess = silent. From then on, firing a slot is just a segment
+  // join on a warm param — the one case every Safari capture agrees is safe.
+  const warmAt = warmBlock();
+  for (let i = 0; i < NOTE_SLOTS; i++) {
+    const s = audioCtx.createGain();
+    s.gain.value = 1; // dormant: transparent, no events until fired once
+    s.gain.setValueAtTime(1, warmAt); // warm the cache with a no-op (value IS 1)
+    if (chain.length) chain[chain.length - 1].connect(s);
+    chain.push(s);
+  }
+  return chain;
+}
+
+function makeChain(dest) {
+  const chain = makeChainSegment();
+  chain[chain.length - 1].connect(dest);
+  return chain;
+}
+
+// Grow a fresh dormant segment onto the chain tail. Order matters (WEBKIT
+// RULE): feed the new segment and land it on the bus BEFORE detaching the old
+// tail, so a Safari quantum-split between the ops can only ever double the
+// note's path briefly — never starve the bus into a silence block.
+function growChain(gr) {
+  const tail = gr.chain[gr.chain.length - 1];
+  const seg = makeChainSegment();
+  tail.connect(seg[0]);
+  seg[seg.length - 1].connect(masterGain);
+  // SCOPED disconnect: bare tail.disconnect() would also sever the brand-new
+  // tail->seg[0] edge made one line above (it removes EVERY output), orphaning
+  // the whole segment — silent note forever. chain-add.mjs + the
+  // slot-exhaustion scene caught exactly this.
+  try { tail.disconnect(masterGain); } catch (e) {}
+  for (const s of seg) gr.chain.push(s);
+}
+
+// Fire the note's next dormant slot: multiply its path by `mult`. Only ever
+// called on a never-fired slot, so the first event pins the slot's true
+// value (CLICK RULE); the slot is pre-wired, so no edge swaps (WEBKIT RULE).
+// A fired stage never gets a second event; concurrent ramps multiply —
+// env x r1 x r2, exactly the telescoping total-constant law of one r per step.
+function fireSlot(group, now, mult, dur) {
+  if (!group || !group.chain) return false; // chainless entry: nothing to fade
+  if (group.slot >= group.chain.length) growChain(group);
+  const stage = group.chain[group.slot++];
+  stage.gain.setValueAtTime(1, qa(now));
+  stage.gain.linearRampToValueAtTime(mult, qa(now + dur));
+  return true;
+}
+
+// A note's audible level: envelope x everything fired slots have faded to.
+function chainLevel(gr) {
+  let lvl = gr.gain.gain.value;
+  for (let i = 0; i < gr.slot; i++) lvl *= gr.chain[i].gain.value;
+  return lvl;
 }
 
 function stopVoicesAt(voiceList, when, extraNodes) {
@@ -315,11 +531,21 @@ function stopVoicesAt(voiceList, when, extraNodes) {
 // later (or are still fading) completely untouched — envelopes don't share.
 function releaseVoices(voiceList, fadeTime, gain) {
   const now = audioCtx.currentTime;
-  const g = gain.gain;
-  g.cancelScheduledValues(now);
-  g.setValueAtTime(g.value, now);
-  g.linearRampToValueAtTime(0, now + fadeTime);
-  stopVoicesAt(voiceList, now + fadeTime, [gain]);
+  let gr = null;
+  for (let i = noteGroups.length - 1; i >= 0; i--) {
+    if (noteGroups[i].gain === gain) { gr = noteGroups[i]; break; }
+  }
+  // fireSlot grows the chain on demand, so a grouped note always has a slot
+  if (gr) {
+    fireSlot(gr, now, 0, fadeTime);
+    // cleanup list: the note's gain + its whole slot chain — all silent when
+    // the timer fires, so those disconnects are invisible (WEBKIT RULE).
+    // qa: cleanup must not precede the block-aligned fade end.
+    stopVoicesAt(voiceList, qa(now + fadeTime), [gain].concat(gr.chain));
+  } else {
+    // registry lost this note (already trimmed to silence): just hard-stop
+    stopVoicesAt(voiceList, qa(now + fadeTime), [gain]);
+  }
 }
 
 function vectorKey(v) {
@@ -394,14 +620,19 @@ function startTone() {
   const keepers = [];
   for (let i = noteGroups.length - 1; i >= 0; i--) { // newest tails matter most
     const gr = noteGroups[i];
-    const tg = gr.gain.gain;
-    const lvl = tg.value;
+    // A note's AUDIBLE level is its envelope times whatever its fired slots
+    // have faded it to (a releasing note still holds its envelope value while
+    // a slot, not the envelope, rides it to zero)
+    const lvl = chainLevel(gr);
     if (lvl <= 0.01) continue; // effectively silent: drop, let it self-expire
     if (sum + lvl > TAIL_BUDGET) {
-      tg.cancelScheduledValues(now);
-      tg.setValueAtTime(Math.max(lvl, 1e-4), now);
-      tg.exponentialRampToValueAtTime(1e-4, now + TAIL_TRIM);
-      stopVoicesAt(gr.voices, now + TAIL_TRIM + 0.01, [gr.gain]);
+      // Duck the old tail: dormant slot, first event pins its own current
+      // value (1), ramped to zero — the note's envelope is never edited
+      // mid-flight (CLICK RULE above the slot chain). Every cancel-and-re-pin
+      // variant spikes the next block's first sample; linear stays as the
+      // shape (exact zero, mirrors the release path).
+      fireSlot(gr, now, 0, TAIL_TRIM);
+      stopVoicesAt(gr.voices, qa(now + TAIL_TRIM + 0.01), [gr.gain].concat(gr.chain));
       continue;
     }
     sum += lvl;
@@ -411,17 +642,35 @@ function startTone() {
 
   // Each note gets its own gain node: attacks and releases are private, so
   // a re-attack never steals from — or clicks through — a note still fading.
+  // The envelope is anchored LOOKAHEAD into the future, not at `now`:
+  // ctx.currentTime trails the render thread (>=1 block, far more when the
+  // main thread is buried under spam + redraws). An envelope that starts in
+  // the past is already midway through its ramp when it commits, so the note
+  // SNAPS into the mix at (lag/attack)x level instead of swelling in — a
+  // voice-sized step at a random phase: exactly the +6ms-after-startTone,
+  // full-swing, smooth-either-side clicks pop-probe corroborated x2 reads.
+  // Scheduled ahead, the ramp is honestly rendered from true zero.
+  const t0 = now + LOOKAHEAD;
   noteGain = audioCtx.createGain();
-  noteGain.connect(masterGain);
+  // Pin at ZERO on creation: a fresh GainNode's gain DEFAULTS TO 1.0, the
+  // oscillators start ~2ms in (before t0!), so without this the note blasts
+  // at full scale for one LOOKAHEAD then snaps to the pin — a blast+drop
+  // click on EVERY note. pop-probe v5 caught exactly this: full-scale
+  // corroborated steps at t0 on essentially every startTone.
+  noteGain.gain.value = 0;
+  // The note is BORN wired into its dormant slot chain (WEBKIT RULE near
+  // the slot chain): every later fade rides a slot, so this edge is never moved.
+  const chain = makeChain(masterGain);
+  noteGain.connect(chain[0]);
   const g = noteGain.gain;
-  g.setValueAtTime(0, now);
-  g.linearRampToValueAtTime(perVoiceVolume, now + envelope.attack);
+  g.setValueAtTime(0, qa(t0));
+  g.linearRampToValueAtTime(perVoiceVolume, qa(t0 + envelope.attack));
   g.linearRampToValueAtTime(perVoiceVolume * envelope.sustain,
-    now + envelope.attack + envelope.decay);
+    qa(t0 + envelope.attack + envelope.decay));
 
   voices = voicing.map(s => createVoice(s.freq, s.key, noteGain));
   noteGroups = keepers;
-  noteGroups.push({ gain: noteGain, voices });
+  noteGroups.push({ gain: noteGain, voices, chain, slot: 0 });
 
   isSounding = true;
   stateDisplay.textContent = 'sounding';
@@ -439,8 +688,12 @@ function stopTone() {
   stateDisplay.classList.remove('sounding');
 }
 
-function updateFrequencyIfSounding() {
+// preserveLevel=true skips the loudness rebalance. A pivot landing must not
+// swell the survivor: it keeps ringing as the root at the very level it had
+// as a chord voice (a chord collapsing to 1 voice would otherwise jump 3x).
+function updateFrequencyIfSounding(preserveLevel) {
   if (!isSounding) return;
+  const keepLevel = preserveLevel === true; // never trust event args
 
   const voicing = getChordVoicing();
   const now = audioCtx.currentTime;
@@ -451,26 +704,45 @@ function updateFrequencyIfSounding() {
   const kept = [];
   const dying = [];
   for (const v of voices) {
-    if (want.has(v.key)) kept.push({ voice: v, freq: want.get(v.key) });
-    else dying.push(v);
+    if (want.has(v.key)) {
+      // consume the match: one voicing entry pairs with one voice, never two,
+      // so a stale duplicate key fades out instead of doubling the pitch
+      kept.push({ voice: v, freq: want.get(v.key) });
+      want.delete(v.key);
+    } else {
+      dying.push(v);
+    }
   }
 
+  // Dying voices fade through their own dormant fout slot: first event pins
+  // the slot's true value (CLICK RULE), nothing is rewired (WEBKIT RULE).
   for (const v of dying) {
-    const vg = v.voiceGain.gain;
-    vg.cancelScheduledValues(now);
-    vg.setValueAtTime(vg.value, now);
-    vg.linearRampToValueAtTime(0, now + VOICE_FADE);
+    const g = v.fout.gain;
+    g.setValueAtTime(1, qa(now));
+    g.linearRampToValueAtTime(0, qa(now + VOICE_FADE));
   }
-  if (dying.length > 0) stopVoicesAt(dying, now + VOICE_FADE);
+  if (dying.length > 0) stopVoicesAt(dying, qa(now + VOICE_FADE));
 
   const haveKeys = new Set(kept.map(k => k.voice.key));
   const added = [];
   for (const s of voicing) {
     if (haveKeys.has(s.key)) continue;
     const v = createVoice(s.freq, s.key, noteGain);
-    const vg = v.voiceGain.gain;
-    vg.setValueAtTime(0, now);
-    vg.linearRampToValueAtTime(v.loud, now + Math.max(envelope.attack, VOICE_FADE));
+    // Fade-in rides the voice's born-wired fin slot. Deliberate twist: the
+    // slot's true value is 1, so this first event is NOT its current value —
+    // the CLICK-RULE artifact sample equals the first event's value, which is
+    // 0: exactly what a just-born voice contributes at that moment (its
+    // oscillator has not even started for +1-3ms, and pop-probe v7 caught the
+    // old cancel-and-re-pin version of this path punching a 0.227 hole out of
+    // the mix one block later). Chromium renders no artifact at all.
+    // finAt re-clamps to the live clock: createVoice just spent real time
+    // (clock advances during the task on Safari), so the loop's `now` is
+    // already stale — a past-anchored fade-in eats its own ramp and the
+    // voice steps into the mix at partial level (v8.2 field capture class).
+    const finAt = Math.max(now, audioCtx.currentTime);
+    const f = v.fin.gain;
+    f.setValueAtTime(0, finAt);
+    f.linearRampToValueAtTime(1, finAt + Math.max(envelope.attack, VOICE_FADE));
     added.push({ voice: v, freq: s.freq });
   }
 
@@ -480,13 +752,32 @@ function updateFrequencyIfSounding() {
   const group = noteGroups[noteGroups.length - 1];
   if (group && group.gain === noteGain) group.voices = voices;
 
-  // Keep total loudness steady as the voice count changes
-  if (dying.length > 0 || added.length > 0) {
-    const level = (VOLUME / voices.length) * envelope.sustain;
-    const g = noteGain.gain;
-    g.cancelScheduledValues(now);
-    g.setValueAtTime(g.value, now);
-    g.linearRampToValueAtTime(level, now + VOICE_FADE);
+  // Keep total loudness steady as the voice count changes. All voices sit at
+  // roughly the same per-voice level, so the note's TOTAL just needs scaling
+  // by n_before/n_after: the next dormant slot glides there within one
+  // VOICE_FADE, multiplying whatever the envelope is already doing — the
+  // swell keeps going, the envelope is never edited (CLICK RULE), and fired
+  // stages multiply, so a run of re-aims telescopes to n_start/n_end and the
+  // total stays constant (no re-aim ever re-reads or rewrites a past slot).
+  if (!keepLevel && (dying.length > 0 || added.length > 0)) {
+    const nBefore = kept.length + dying.length;
+    const nAfter = voices.length;
+    if (nBefore > 0 && nAfter > 0 && nBefore !== nAfter) {
+      // fresh clock: createVoice (above) may have consumed ms of it
+      fireSlot(group, Math.max(now, audioCtx.currentTime), nBefore / nAfter, VOICE_FADE); // grows the chain on demand
+    }
+  }
+
+  // EXPERIMENT (pop-probe v8.2 hypothesis): setTargetAtTime on a SOUNDING
+  // oscillator/bandpass frequency is the last live-timeline modification in
+  // the engine. It renders sample-accurately in Chromium (harness green) but
+  // Safari's click reports correlate with keystroke retunes, not with the
+  // (now-pure-param) level slots. `window.freqGlide = false` in the console
+  // turns this whole block off: kept voices hold their old pitch until the
+  // next note-on. If the clicks vanish, the glide is the culprit.
+  if (window.freqGlide === false) {
+    for (const { voice: v, freq } of kept.concat(added)) v.freq = freq;
+    return;
   }
 
   // Glide to target frequencies (no-op for voices whose freq didn't change)
@@ -553,18 +844,26 @@ function startHum() {
 
   const freq = foldToAudible(baseHz);
   const now = audioCtx.currentTime;
+  const warmAt = warmBlock(); // WARM RULE (see makeChainSegment)
 
   // The hum rides the shared bus too: its own gain node keeps it independent
   // of the note envelopes, the master volume scales it with everything else,
   // and the output limiter catches hum + notes together.
   const gain = audioCtx.createGain();
-  gain.gain.setValueAtTime(0, now);
-  gain.gain.linearRampToValueAtTime(HUM_VOLUME, now + HUM_FADE);
-  gain.connect(masterGain);
+  gain.gain.value = 0; // not 1.0, even briefly: the osc starts immediately
+  gain.gain.setValueAtTime(0, qa(now));
+  gain.gain.linearRampToValueAtTime(HUM_VOLUME, qa(now + HUM_FADE));
+  // Born-wired dormant fade slot (WEBKIT RULE): stopHum fires its first event
+  // instead of splicing an edge between the hum and the bus.
+  const fade = audioCtx.createGain();
+  fade.gain.value = 1;
+  fade.connect(masterGain);
+  gain.connect(fade);
 
   const osc = audioCtx.createOscillator();
   osc.type = 'sine';
   osc.frequency.value = freq;
+  osc.frequency.setValueAtTime(freq, warmAt);
   osc.connect(gain);
   osc.start();
 
@@ -572,6 +871,7 @@ function startHum() {
   const osc2 = audioCtx.createOscillator();
   osc2.type = 'sine';
   osc2.frequency.value = freq * 2;
+  osc2.frequency.setValueAtTime(freq * 2, warmAt);
   const gain2 = audioCtx.createGain();
   gain2.gain.value = 0.12;
   osc2.connect(gain2);
@@ -581,7 +881,7 @@ function startHum() {
   // The drone gets the harmonic stack too: it becomes a full tuning fork
   const partials = addHarmonics(freq, gain, now);
 
-  humNodes = { oscs: [osc, osc2, ...partials.map(p => p.osc)], gains: [gain, gain2], partials };
+  humNodes = { oscs: [osc, osc2, ...partials.map(p => p.osc)], gains: [gain, gain2], partials, fade };
   setHumActive(true);
 }
 
@@ -589,16 +889,17 @@ function stopHum() {
   if (!humNodes) return;
 
   const now = audioCtx.currentTime;
-  const g = humNodes.gains[0].gain;
-  g.cancelScheduledValues(now);
-  g.setValueAtTime(g.value, now);
-  g.linearRampToValueAtTime(0, now + HUM_FADE);
+  const fade = humNodes.fade;
+  fade.gain.setValueAtTime(1, qa(now)); // first event == its true value (CLICK RULE)
+  fade.gain.linearRampToValueAtTime(0, qa(now + HUM_FADE));
 
   const dying = humNodes;
   humNodes = null;
-  for (const osc of dying.oscs) { try { osc.stop(now + HUM_FADE + 0.01); } catch(e) {} }
+  for (const osc of dying.oscs) { try { osc.stop(qa(now + HUM_FADE) + 0.01); } catch(e) {} }
   setTimeout(() => {
+    // everything here is inaudible by now, so these disconnects are invisible
     for (const node of dying.gains) { try { node.disconnect(); } catch(e) {} }
+    try { fade.disconnect(); } catch(e) {}
   }, HUM_FADE * 1000 + 60);
 
   setHumActive(false);
@@ -626,6 +927,7 @@ function retuneHum() {
 // === Step Pivot Chord Mode ===
 
 const ROOT_KEY = vectorKey(new PrimeVector(0, 0, 0, 0));
+const LEAVING_KEY = 'leaving'; // voice tag: matches nothing, fades out on the next diff
 
 function togglePivot() {
   pivotMode = !pivotMode;
@@ -677,12 +979,19 @@ function landOnPivotVoice() {
   if (!farthest || farthest.isZero()) {
     clearVoicing();
     updateDisplay();
-    updateFrequencyIfSounding();
+    updateFrequencyIfSounding(true); // landing never rebalances the level
     return;
   }
 
   const outerVoice = voices.find(v => v.key === vectorKey(farthest));
-  if (outerVoice) outerVoice.key = ROOT_KEY; // relabel before the voice diff so it survives
+  if (outerVoice) {
+    // The old root voice now plays UNDER the new root — left tagged ROOT_KEY
+    // it would survive the diff beside the relabeled outer voice and double
+    // the pitch. Retag it so the voice diff fades it out like any departure.
+    const oldRoot = voices.find(v => v !== outerVoice && v.key === ROOT_KEY);
+    if (oldRoot) oldRoot.key = LEAVING_KEY;
+    outerVoice.key = ROOT_KEY; // relabel before the voice diff so it survives
+  }
 
   const label = pivotLabel(farthest);
   pushUndo(farthest, label);
@@ -690,7 +999,7 @@ function landOnPivotVoice() {
 
   clearVoicing();
   updateDisplay(label);
-  updateFrequencyIfSounding();
+  updateFrequencyIfSounding(true); // the landed voice keeps its chord-level mix
 }
 
 // === Invert Mode ===
@@ -1255,6 +1564,7 @@ const SCORE_SEED = (typeof SONGS !== 'undefined' && SONGS.length)
 
 let scoreEl, pbStatusEl, recBtn, playBtn, stopBtn, pbLoopEl, pbRestoreBtn, pbResetEl, pbSongsEl;
 let recEvents = null;    // array of events while recording, else null
+let recDownCodes = new Set(); // keys the current take has seen pressed
 let discardedScore = null; // last score displaced by a recording or song load (one-slot undo)
 let lastRecHz = null;      // coalescing tracker for recorded slider moves
 let recStartMs = 0;
@@ -1284,6 +1594,11 @@ function recordKeyEvent(e, down) {
   if (!recEvents || playing) return;
   if (e.key === '?') return;          // the field guide is not part of the music
   if (!scoreTokenFor(e.code)) return; // only the instrument's own keys
+  // A key held down before the take started has no press to release: drop
+  // its orphan keyup, or the score would open with a release that tells
+  // playback to let go of a note the take never attacked.
+  if (down) recDownCodes.add(e.code);
+  else if (!recDownCodes.delete(e.code)) return;
   recEvents.push({ t: Math.round(performance.now() - recStartMs), code: e.code, down });
 }
 
@@ -1303,6 +1618,7 @@ function startRecording() {
   stopPlayback();
   recStartMs = performance.now();
   recEvents = [];
+  recDownCodes.clear();
   lastRecHz = null;
   recBtn.classList.add('recording');
   recBtn.textContent = '■ stop';
@@ -1548,5 +1864,7 @@ setupVolumeControl();
 setupSessionControls();
 setupSafetyNets();
 console.log('prime drifter organ — build: step 16 polish');
+window.__pdrRev = 6; // engine fingerprint for pop-probe (warm-cache + silent-born + grow + align + chiff-kill)
+window.__pdrChiff = 'killed'; // chiff absent from graph unless window.chiffOn === true
 updateDisplay();
 requestAnimationFrame(overtoneLoop);

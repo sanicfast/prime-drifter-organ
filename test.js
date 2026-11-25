@@ -242,6 +242,8 @@ assert('score: every code round-trips its token',
   assert('parse: sethz missing arg', parseScore('1.0 sethz').errors.length === 1);
   assert('parse: sethz bad arg', parseScore('1.0 sethz oops').errors.length === 1);
   assert('parse: sethz non-positive arg', parseScore('1.0 sethz 0').errors.length === 1);
+  assert('parse: sethz trailing junk rejected', parseScore('1.0 sethz 264abc').errors.length === 1);
+  assert('parse: sethz double decimal rejected', parseScore('1.0 sethz 264.5.5').errors.length === 1);
 }
 {
   const { events } = parseScore('0.5 sethz 330.5 h');

@@ -247,7 +247,9 @@ function parseScore(text) {
     for (let ti = 0; ti < tokens.length; ti++) {
       const tok = tokens[ti];
       if (tok === 'sethz') {
-        const hz = parseFloat(tokens[++ti]);
+        // strict: parseFloat alone would happily turn "264abc" into 264
+        const arg = tokens[++ti];
+        const hz = /^\d+(\.\d+)?$/.test(arg || '') ? parseFloat(arg) : NaN;
         if (!Number.isFinite(hz) || hz <= 0) {
           errors.push({ line: lineNo, msg: 'sethz needs a positive hz argument' });
           continue;
