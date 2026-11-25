@@ -217,10 +217,10 @@ function install(o) {
   };
 }
 
-async function openPage(browser) {
+async function openPage(browser, len = RENDER_LEN) {
   const page = await browser.newPage();
   page.on('pageerror', (e) => console.log('  [page error]', e.message));
-  await page.addInitScript(install, { len: RENDER_LEN, sr: SR, nolimit: process.env.NO_LIMIT === '1' });
+  await page.addInitScript(install, { len, sr: SR, nolimit: process.env.NO_LIMIT === '1' });
   await page.goto(URL_);
   return page;
 }
@@ -297,10 +297,57 @@ const SCENES = [
     ev.push(...pressEv(2.4, 'KeyM'));
     return ev;
   } },
+  { name: 'song-saria', len: 34, ev: () => [
+    [0.01, 'keydown', 'Period'], [0.04, 'keyup', 'Period'], [0.12, 'keydown', 'KeyW'], [0.12, 'keydown', 'Space'],
+    [0.12, 'keyup', 'KeyW'], [0.72, 'keyup', 'Space'], [0.72, 'keydown', 'KeyE'], [0.72, 'keydown', 'Space'],
+    [0.72, 'keyup', 'KeyE'], [1.32, 'keyup', 'Space'], [1.32, 'keydown', 'Digit5'], [1.32, 'keydown', 'Space'],
+    [1.32, 'keyup', 'Digit5'], [2.52, 'keyup', 'Space'], [2.52, 'keydown', 'KeyT'], [2.52, 'keydown', 'KeyA'],
+    [2.52, 'keydown', 'Space'], [2.52, 'keyup', 'KeyT'], [2.52, 'keyup', 'KeyA'], [3.12, 'keyup', 'Space'],
+    [3.12, 'keydown', 'KeyE'], [3.12, 'keydown', 'Space'], [3.12, 'keyup', 'KeyE'], [3.72, 'keyup', 'Space'],
+    [3.72, 'keydown', 'Digit5'], [3.72, 'keydown', 'Space'], [3.72, 'keyup', 'Digit5'], [4.92, 'keyup', 'Space'],
+    [4.92, 'keydown', 'KeyT'], [4.92, 'keydown', 'KeyA'], [4.92, 'keydown', 'Space'], [4.92, 'keyup', 'KeyT'],
+    [4.92, 'keyup', 'KeyA'], [5.52, 'keyup', 'Space'], [5.52, 'keydown', 'KeyE'], [5.52, 'keydown', 'Space'],
+    [5.52, 'keyup', 'KeyE'], [6.12, 'keyup', 'Space'], [6.12, 'keydown', 'Digit5'], [6.12, 'keydown', 'Space'],
+    [6.12, 'keyup', 'Digit5'], [6.72, 'keyup', 'Space'], [6.72, 'keydown', 'KeyA'], [6.72, 'keydown', 'Space'],
+    [6.72, 'keyup', 'KeyA'], [7.32, 'keyup', 'Space'], [7.32, 'keydown', 'KeyV'], [7.32, 'keydown', 'Space'],
+    [7.32, 'keyup', 'KeyV'], [8.52, 'keyup', 'Space'], [8.52, 'keydown', 'Digit4'], [8.52, 'keydown', 'KeyQ'],
+    [8.52, 'keydown', 'Space'], [8.52, 'keyup', 'Digit4'], [8.52, 'keyup', 'KeyQ'], [9.12, 'keyup', 'Space'],
+    [9.12, 'keydown', 'KeyT'], [9.12, 'keydown', 'Space'], [9.12, 'keyup', 'KeyT'], [9.72, 'keyup', 'Space'],
+    [9.72, 'keydown', 'KeyG'], [9.72, 'keydown', 'Space'], [9.72, 'keyup', 'KeyG'], [10.32, 'keyup', 'Space'],
+    [10.32, 'keydown', 'KeyD'], [10.32, 'keydown', 'Space'], [10.32, 'keyup', 'KeyD'], [10.92, 'keyup', 'Space'],
+    [10.92, 'keydown', 'KeyF'], [10.92, 'keydown', 'Space'], [10.92, 'keyup', 'KeyF'], [12.12, 'keyup', 'Space'],
+    [12.12, 'keydown', 'KeyV'], [12.12, 'keydown', 'Space'], [12.12, 'keyup', 'KeyV'], [12.72, 'keyup', 'Space'],
+    [12.72, 'keydown', 'Digit4'], [12.72, 'keydown', 'Space'], [12.72, 'keyup', 'Digit4'], [13.32, 'keyup', 'Space'],
+    [13.32, 'keydown', 'KeyR'], [13.32, 'keydown', 'Space'], [13.32, 'keyup', 'KeyR'], [14.52, 'keyup', 'Space'],
+    [14.52, 'keydown', 'KeyF'], [14.52, 'keydown', 'Space'], [14.52, 'keyup', 'KeyF'], [15.72, 'keyup', 'Space'],
+    [15.72, 'keydown', 'KeyT'], [15.72, 'keydown', 'Space'], [15.72, 'keyup', 'KeyT'], [16.32, 'keyup', 'Space'],
+    [16.32, 'keydown', 'KeyE'], [16.32, 'keydown', 'Space'], [16.32, 'keyup', 'KeyE'], [16.92, 'keyup', 'Space'],
+    [16.92, 'keydown', 'Digit5'], [16.92, 'keydown', 'Space'], [16.92, 'keyup', 'Digit5'], [18.12, 'keyup', 'Space'],
+    [18.12, 'keydown', 'KeyT'], [18.12, 'keydown', 'KeyA'], [18.12, 'keydown', 'Space'], [18.12, 'keyup', 'KeyT'],
+    [18.12, 'keyup', 'KeyA'], [18.72, 'keyup', 'Space'], [18.72, 'keydown', 'KeyE'], [18.72, 'keydown', 'Space'],
+    [18.72, 'keyup', 'KeyE'], [19.32, 'keyup', 'Space'], [19.32, 'keydown', 'Digit5'], [19.32, 'keydown', 'Space'],
+    [19.32, 'keyup', 'Digit5'], [20.52, 'keyup', 'Space'], [20.52, 'keydown', 'KeyT'], [20.52, 'keydown', 'KeyA'],
+    [20.52, 'keydown', 'Space'], [20.52, 'keyup', 'KeyT'], [20.52, 'keyup', 'KeyA'], [21.12, 'keyup', 'Space'],
+    [21.12, 'keydown', 'KeyE'], [21.12, 'keydown', 'Space'], [21.12, 'keyup', 'KeyE'], [21.72, 'keyup', 'Space'],
+    [21.72, 'keydown', 'Digit5'], [21.72, 'keydown', 'Space'], [21.72, 'keyup', 'Digit5'], [22.32, 'keyup', 'Space'],
+    [22.32, 'keydown', 'KeyA'], [22.32, 'keydown', 'Space'], [22.32, 'keyup', 'KeyA'], [22.92, 'keyup', 'Space'],
+    [22.92, 'keydown', 'KeyV'], [22.92, 'keydown', 'Space'], [22.92, 'keyup', 'KeyV'], [24.12, 'keyup', 'Space'],
+    [24.12, 'keydown', 'Digit4'], [24.12, 'keydown', 'KeyQ'], [24.12, 'keydown', 'Space'], [24.12, 'keyup', 'Digit4'],
+    [24.12, 'keyup', 'KeyQ'], [24.72, 'keyup', 'Space'], [24.72, 'keydown', 'KeyT'], [24.72, 'keydown', 'Space'],
+    [24.72, 'keyup', 'KeyT'], [25.32, 'keyup', 'Space'], [25.32, 'keydown', 'KeyG'], [25.32, 'keydown', 'Space'],
+    [25.32, 'keyup', 'KeyG'], [25.92, 'keyup', 'Space'], [25.92, 'keydown', 'KeyD'], [25.92, 'keydown', 'Space'],
+    [25.92, 'keyup', 'KeyD'], [26.52, 'keyup', 'Space'], [26.52, 'keydown', 'KeyF'], [26.52, 'keydown', 'Space'],
+    [26.52, 'keyup', 'KeyF'], [27.72, 'keyup', 'Space'], [27.72, 'keydown', 'KeyV'], [27.72, 'keydown', 'Space'],
+    [27.72, 'keyup', 'KeyV'], [28.32, 'keyup', 'Space'], [28.32, 'keydown', 'Digit4'], [28.32, 'keydown', 'Space'],
+    [28.32, 'keyup', 'Digit4'], [28.92, 'keyup', 'Space'], [28.92, 'keydown', 'KeyR'], [28.92, 'keydown', 'Space'],
+    [28.92, 'keyup', 'KeyR'], [30.12, 'keyup', 'Space'], [30.12, 'keydown', 'KeyF'], [30.12, 'keydown', 'Space'],
+    [30.12, 'keyup', 'KeyF'], [31.92, 'keyup', 'Space'], [32.22, 'keydown', 'Period'], [32.25, 'keyup', 'Period'],
+    [32.37, 'keydown', 'Digit0'], [32.37, 'keyup', 'Digit0']
+  ] },
 ];
 
 async function runScene(browser, scene) {
-  const page = await openPage(browser);
+  const page = await openPage(browser, scene.len || RENDER_LEN);
   const ev = scene.ev();
   const r = await page.evaluate((e) => window.__press(e), ev);
   await page.close();

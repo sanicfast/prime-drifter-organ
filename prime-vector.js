@@ -587,5 +587,60 @@ const SONGS = [
 4.80 0+
 4.83 0-
 `,
+  },
+  {
+    name: "Saria's Song — pure steps",
+    score: `# saria's song (ocarina of time) — the real tune, in C, root = do
+# F=fa A=la B=ti E=mi D=re G=sol, the tune's high C = do'
+# two-step gaps glide through silent pure waypoints on the way off the note:
+# ti->fa steps do' (t,a) · re->ti steps mi (4,q) · every landing is graded pure
+# repeat ends the same D E G E turnaround, final E held longer — then 0 snaps home
+
+0.00 sethz 264
+0.01 .
+0.12  w+  space+  w-
+0.72  space-  e+  space+  e-
+1.32  space-  5+  space+  5-
+2.52  space-  t+ a+  space+  t- a-
+3.12  space-  e+  space+  e-
+3.72  space-  5+  space+  5-
+4.92  space-  t+ a+  space+  t- a-
+5.52  space-  e+  space+  e-
+6.12  space-  5+  space+  5-
+6.72  space-  a+  space+  a-
+7.32  space-  v+  space+  v-
+8.52  space-  4+ q+  space+  4- q-
+9.12  space-  t+  space+  t-
+9.72  space-  g+  space+  g-
+10.32  space-  d+  space+  d-
+10.92  space-  f+  space+  f-
+12.12  space-  v+  space+  v-
+12.72  space-  4+  space+  4-
+13.32  space-  r+  space+  r-
+14.52  space-  f+  space+  f-
+15.72  space-  t+  space+  t-
+16.32  space-  e+  space+  e-
+16.92  space-  5+  space+  5-
+18.12  space-  t+ a+  space+  t- a-
+18.72  space-  e+  space+  e-
+19.32  space-  5+  space+  5-
+20.52  space-  t+ a+  space+  t- a-
+21.12  space-  e+  space+  e-
+21.72  space-  5+  space+  5-
+22.32  space-  a+  space+  a-
+22.92  space-  v+  space+  v-
+24.12  space-  4+ q+  space+  4- q-
+24.72  space-  t+  space+  t-
+25.32  space-  g+  space+  g-
+25.92  space-  d+  space+  d-
+26.52  space-  f+  space+  f-
+27.72  space-  v+  space+  v-
+28.32  space-  4+  space+  4-
+28.92  space-  r+  space+  r-
+30.12  space-  f+  space+  f-
+31.92  space-
+32.22  .
+32.37  0+ 0-
+`,
   }
 ];
