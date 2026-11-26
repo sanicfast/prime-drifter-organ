@@ -834,6 +834,123 @@ const SONGS = [
 `,
   },
   {
+    name: "Syntonic Drift — the quarter-tone that isn't",
+    kind: 'drifting',
+    drift: [-4, 7, -3, 0], // 2187:2000 = a clean twelfth + one syntonic comma: +154.7 cents per loop
+    score: `# syntonic drift — a tiny phrase that resolves onto the wrong la, forever
+# four moves tune in silence (5 · s · s · d) so the bow can open low (q) and
+# walk the build up-down-up: fifth (q), fourth down (s), third down (d), fold
+# up an octave (1), semitone down (g) — and then resolve as if by magic:
+# semitone up (t, 16:15) into minor third up (r, 6:5) lands EXACTLY a just
+# 3:2 above the note that just spoke. the resolving fifth rings pure. the
+# landing underneath it exists in no scale: [-4,7,-3,0] = 2187:2000, that
+# perfect twelfth plus one syntonic comma — an la 21.5 cents proud of the
+# real one, a quarter-tone (43.1!) flat of the do' it almost is. loop with
+# reset OFF and every pass stacks the same clean fifths on the same spelling,
+# so the whole phrase rises 154.7 cents a trip: eight passes lift it a full
+# Pythagorean comma, forty-five wrap the octave. (the comma's own sneeze is
+# the v key: b+v from a just re parks a quarter-tone under do' — the half of
+# 128:125 the t+r resolve cannot cross.)
+
+0.00 sethz 264
+0.10  5+ 5-              # tuning, not tone: re, silent
+0.32  s+ s-              # down a fourth
+0.54  s+ s-              # ... and again
+0.76  d+ d-              # ... a major third down: wound under the floor
+0.98  space+             # the bow opens low
+1.53  q+ q-              # up a fifth — the build
+2.08  s+ s-              # down a fourth
+2.63  d+ d-              # down a major third
+3.18  1+ 1-              # fold the octave up
+3.73  g+ g-              # semitone down (15:16) — leaning on the leading ghost
+4.28  t+ t-              # semitone up (16:15) — the resolve begins
+4.83  r+ r-              # minor third up (6:5) — rings a pure fifth above...
+5.38  space-             # ... the last note, a comma above the tonic it answers
+`,
+  },
+  {
+    name: "Twelve Fifth Spiral — the Pythagorean comma",
+    kind: 'drifting',
+    drift: [-23, 12, 0, 0], // (3/2)^12 = 531441:262144: twelve pure fifths overshoot six octaves by 23.5 cents
+    score: `# twelve fifth spiral — your original trick, one octave higher every fold
+# climb an octave (1) and open the bow; then twelve pure fifths (q), each
+# folded down an octave (z) — the exact 12-up-7-down walk you started with.
+# every landing is a clean 3:2 against the note it left — and every one from
+# the second onward sits prouder than the tempered note it stands for, one
+# Pythagorean comma per fifth: +2.0, 3.9, 5.9, 7.8, 9.8, 11.7, 13.7, 15.6,
+# 17.6, 19.6, 21.5 — and the twelfth lands back on a do, at +23.5: a whole
+# clean octave travelled, a quarter of a semitone of pure comma banked.
+# the spiral walks the whole chromatic circle; the seventh landing (fi, at
+# 611.7 — a wolf's tritone no tempered keyboard can even name) is the step
+# the circle can never quite spell.
+# the drift per loop IS the piece: 41 loops wrap the comma back to zero.
+
+0.00 sethz 264
+0.10  space+
+0.50  1+ 1-              # climb an octave to start the walk
+0.90  q+ q-              # do -> sol (+2.0)
+1.20  z+ z-
+1.30  q+ q-              # -> re (+3.9)
+1.60  z+ z-
+1.70  q+ q-              # -> mi, sharpening (+5.9)
+2.00  z+ z-
+2.10  q+ q-              # -> the fourth's proud side (+7.8)
+2.40  z+ z-
+2.50  q+ q-              # -> la (+9.8)
+2.80  z+ z-
+2.90  q+ q-              # -> ti (+11.7)
+3.20  z+ z-
+3.30  q+ q-              # seventh fifth — fi, the wolf's door (+13.7)
+3.60  z+ z-
+3.70  q+ q-              # -> do' (+15.6)
+4.00  z+ z-
+4.10  q+ q-              # -> sol' (+17.6)
+4.40  z+ z-
+4.50  q+ q-              # -> re' (+19.6)
+4.80  z+ z-
+4.90  q+ q-              # -> la' (+21.5)
+5.20  z+ z-
+5.30  q+ q-              # twelfth fifth — a do two octaves up...
+5.60  z+ z-              # ...folded home at +23.5: the Pythagorean comma
+6.60  space-
+`,
+  },
+  {
+    name: "Two Sevenths Under — diaschisma",
+    kind: 'drifting',
+    drift: [-9, 0, 0, 2], // (7/4)^2 = 49:16: two harmonic sevenths fall 35.7 cents short of two octaves
+    score: `# two sevenths under — the 7-prime's own comma, sung low and slow
+# a harmonic seventh (3, 7:4) is 968.8 cents — a third of a tone FLATTER than
+# a tempered minor seventh. the tune climbs it twice (3 3) and folds NOTHING.
+# the middle is three pure decorating pairs — third up (e), fourth up (w),
+# minor third down (f), and their exact mirrors back (d, s, r) — so the 3-,
+# 5- and 7-primes come back even, on purpose. then five plain octaves (z x5)
+# try to pay the 2-prime for the whole climb, and the landing stops 35.7
+# cents UNDER two clean octaves. that gap is the diaschisma, 128:121 — the
+# 7-prime's native comma — and there is no spelling home from 49:16: no word
+# problem of 7:4s and octaves ever climbs the 7 back. this drift only runs
+# one way: loop with reset OFF and every pass sinks the whole figure another
+# 35.7 cents — more than half a tone under itself after four passes.
+
+0.00 sethz 264
+0.10  space+
+0.40  3+ 3-              # up the harmonic seventh (7:4)
+1.00  3+ 3-              # ... and again — nothing folds
+1.60  e+ e-              # up a major third (5:4)
+2.05  w+ w-              # up a fourth (4:3)
+2.50  f+ f-              # down a minor third (5:6)
+2.95  d+ d-              # the mirrors, exact: down a major third (4:5)
+3.40  s+ s-              # down a fourth (3:4)
+3.85  r+ r-              # up a minor third (6:5)
+4.30  z+ z-              # five plain octaves, paying the 2-prime...
+4.60  z+ z-
+4.90  z+ z-
+5.20  z+ z-
+5.50  z+ z-              # ... landing 35.7 cents shy of two clean octaves
+6.50  space-
+`,
+  },
+  {
     name: "Zelda's Lullaby — as first transcribed",
     kind: 'round trip',
     score: `# the lullaby exactly as transcribed — every step a clean ratio, the drift
