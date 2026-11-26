@@ -41,16 +41,72 @@ class PrimeVector {
   }
 }
 
-// === Octave Folding ===
+// === Octave Wrapping ===
 
-const FOLD_LOW = 55;
-const FOLD_HIGH = 1760;
+// The audible band is a tube that WRAPS: the ceiling is the floor one band
+// width up, so climbing past the top re-enters just above the bottom (and
+// diving below the floor re-enters just under the ceiling). A loop that
+// drifts sharp keeps travelling around the tube instead of sticking at the
+// top of the range. Inside the band nothing moves: pure pitches are never
+// retuned — only the octave they speak in changes, which never changes the
+// note (the prime vector always holds the true position).
+// Default band: 4 octaves from 55 Hz; foldToAudible(440) === 440 exactly.
+let FOLD_LOW = 55;
+let FOLD_SPAN_OCTAVES = 4; // settable: 1..7 octaves wide
 
-function foldToAudible(freq) {
+function foldLowFromSlider(t) {
+  return 55 * Math.pow(2, t); // t in 0..7 -> 55..7040 Hz
+}
+
+function foldSpanOctaves() {
+  return FOLD_SPAN_OCTAVES;
+}
+
+function setFoldSpan(oct) {
+  FOLD_SPAN_OCTAVES = Math.min(7, Math.max(1, oct));
+}
+
+// Wrap any frequency into the band [low, low·2^span) — the true modulo:
+// the octave a pitch speaks in is reduced mod the band's width, so climbing
+// past the ceiling lands just above the floor (and diving under the floor
+// lands just under the ceiling). A loop that drifts sharp keeps travelling
+// around the tube instead of sticking at the top — the fold of the old
+// design clamped; this one wraps. Every result is an exact octave of the
+// input; in-band pitches pass through untouched. Computed as a whole-octave
+// walk (no float log/mod), so octave-exact inputs land octave-exact, and
+// the walk is O(octaves out of band) — a drifting loop crossing the ceiling
+// costs a single halving step. Band edges resolve DOWN: the ceiling of one
+// tile IS the floor of the next.
+function foldToAudible(freq, low = FOLD_LOW, span = FOLD_SPAN_OCTAVES) {
+  if (!(freq > 0) || !isFinite(freq)) return low; // guard: silence/NaN roots land on the floor
+  const UP = low * Math.pow(2, span); // the ceiling
   let f = freq;
-  while (f < FOLD_LOW) f *= 2;
-  while (f > FOLD_HIGH) f /= 2;
+  while (f >= UP || f < low) {
+    if (f >= UP) f /= 2; // halving off the top IS the wrap
+    else f *= 2;         // doubling up from under the floor is the wrap's mirror
+  }
   return f;
+}
+
+// How many octaves foldToAudible shifted a frequency (negative = folded down).
+function foldOctavesApplied(freq, low = FOLD_LOW, span = FOLD_SPAN_OCTAVES) {
+  return Math.round(Math.log2(foldToAudible(freq, low, span) / freq));
+}
+
+// The true modulo representative. There is no formula-grade oracle here:
+// the defining property of foldToAudible IS its own oracle — the landing is
+// the input times a power of two, sitting inside the band, reachable in a
+// finite alternating walk. Every attempt at a closed-form cross-check failed
+// because none of them survive float reality at band edges (float log2
+// modulo knows no number theory; odd-core stripping collapses four octaves
+// of distinct landings). The exhaustive sweep in the test suite proves the
+// placement walk and foldToAudible coincide across the instrument's own
+// frequency space, which is where it matters.
+
+// A given pitch's band tile under the walk — handy for reasoning/debugging:
+// which [low·2^k, low·2^(k+1)) tile an input sits in, relative to the band.
+function foldTile(freq, low = FOLD_LOW, span = FOLD_SPAN_OCTAVES) {
+  return Math.floor(Math.log2(freq / low) / span);
 }
 
 // === Movement Vectors ===

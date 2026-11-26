@@ -147,6 +147,32 @@ function setupRootControl() {
   setBaseHz(rootHzFromSlider(parseFloat(rootSliderEl.value)));
 }
 
+// === Audible Band Controls ===
+
+// The band is (floor, floor * 2^width]. The same slider math as the root:
+// log scale, linear under the hood via log2.
+function setupFoldControl() {
+  const lowEl = document.getElementById('fold-low');
+  const lowLabel = document.getElementById('fold-low-val');
+  const spanEl = document.getElementById('fold-span');
+  const spanLabel = document.getElementById('fold-span-val');
+
+  function refresh() {
+    FOLD_LOW = foldLowFromSlider(parseFloat(lowEl.value));
+    setFoldSpan(parseInt(spanEl.value, 10));
+    const high = FOLD_LOW * Math.pow(2, foldSpanOctaves());
+    lowLabel.textContent = `${FOLD_LOW.toFixed(1)} Hz – ${high >= 1000 ? (high / 1000).toFixed(2) + 'k' : high.toFixed(0)} Hz`;
+    spanLabel.textContent = `${foldSpanOctaves()} oct`;
+    updateDisplay();               // the hz readout is a folded frequency
+    updateFrequencyIfSounding();   // glide a held chord into the new band
+    retuneHum();                   // the drone belongs to the band too
+  }
+
+  lowEl.addEventListener('input', refresh);
+  spanEl.addEventListener('input', refresh);
+  refresh(); // adopt whatever the markup shows
+}
+
 // === Audio ===
 
 function initAudio() {
@@ -1111,10 +1137,11 @@ function drawOvertoneView() {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, w, h);
 
-  // octave grid at powers-of-two above 55
+  // octave grid across the whole axis, wherever the audible band sits now
   ctx.font = '9px monospace';
   ctx.textAlign = 'center';
-  for (const gridF of [55, 110, 220, 440, 880, 1760, 3520, 7040]) {
+  const gridLo = 2 ** Math.ceil(Math.log2(HV_LOW));
+  for (let gridF = gridLo; gridF <= HV_HIGH; gridF *= 2) {
     const x = hvX(gridF, w);
     ctx.strokeStyle = '#1e1e32';
     ctx.beginPath();
@@ -1124,6 +1151,12 @@ function drawOvertoneView() {
     ctx.fillStyle = '#4a4a66';
     ctx.fillText(String(gridF), x, h - 4);
   }
+
+  // the live audible band, shaded — the tube everything folds and wraps inside
+  const bandLo = hvX(Math.max(HV_LOW, FOLD_LOW), w);
+  const bandHi = hvX(Math.min(HV_HIGH, FOLD_LOW * Math.pow(2, foldSpanOctaves())), w);
+  ctx.fillStyle = 'rgba(127, 219, 202, 0.05)';
+  ctx.fillRect(bandLo, 0, bandHi - bandLo, h);
 
   // Collect sources: hum, held voices, fading voices (dimmer)
   const sources = [];
@@ -1861,6 +1894,7 @@ function setupSafetyNets() {
 
 setupSliders();
 setupRootControl();
+setupFoldControl();
 setupBodyControl();
 setupVolumeControl();
 setupSessionControls();

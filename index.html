@@ -138,6 +138,22 @@
     </div>
 
     <div class="envelope">
+      <div class="env-title">audible band</div>
+      <div class="root-row">
+        <label for="fold-low" data-tip="the bottom of the audible band — everything octave-shifts (and wraps) inside it">floor</label>
+        <input type="range" id="fold-low" min="0" max="7" step="0.01" value="0"
+               data-tip="the floor of the band in hz — the ceiling rides exactly this many octaves above the width dial">
+        <span id="fold-low-val">55.0 Hz</span>
+      </div>
+      <div class="root-row">
+        <label for="fold-span" data-tip="how wide the band is, in octaves — narrow bands wrap often, wide ones rarely">width</label>
+        <input type="range" id="fold-span" min="1" max="7" step="1" value="4"
+               data-tip="band width in octaves — climbing past the ceiling wraps you back to the floor, so drifting loops keep travelling instead of sticking up top">
+        <span id="fold-span-val">4 oct</span>
+      </div>
+    </div>
+
+    <div class="envelope">
       <div class="env-title">timbre</div>
       <div class="root-row">
         <label for="body-ctl" data-tip="how many overtones the pipe adds to the fundamental — raise it until pure intervals audibly lock and mistunings audibly buzz">brightness</label>
@@ -230,7 +246,10 @@
           <kbd>[-1, 1, 0, 0]</kbd>; then up a fourth <kbd>[2, -1, 0, 0]</kbd> and you
           land exactly on an octave <kbd>[1, 0, 0, 0]</kbd>. frequencies are computed
           from the vector, never accumulated from floats, so there is zero drift.
-          octave folding only keeps things audible — it never changes the note.</p>
+          octave folding only keeps things audible — it never changes the note. the
+          audible band is a tube closed at both ends: too low doubles up, too high
+          <em>wraps</em> down — a loop that drifts sharp keeps travelling instead of
+          sticking at the ceiling.</p>
         </section>
 
         <section>

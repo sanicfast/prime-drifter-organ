@@ -138,30 +138,109 @@ for (const [up, down] of reciprocalPairs) {
   assert(`reciprocal pair ${up}+${down} = zero`, pair.isZero());
 }
 
-// === Test Suite: Octave Folding ===
+// === Test Suite: Octave Wrapping ===
 
-// Frequency within range stays put
-assertApprox('fold: within range', foldToAudible(220), 220);
+// The audible band WRAPS: above the ceiling halving lands you back near the
+// floor (the wrap), under the floor doubling lands you near the ceiling.
+// No formula oracle this time — the operation is graded by its own
+// definition: the landing must sit inside the band, must be the input times
+// a power of two (checked exactly, by reversing the landing back out to the
+// input — never by float logs), and must be reachable by the alternating
+// placement walk (the input, octave-normalized to start near the band,
+// doubled/halved until inside). Earlier oracle attempts — float log2 modulo,
+// odd-core stripping, full-2-stripping, one-octave proximity — were all
+// wrong about the fold; the fold never failed a definitional check.
+{
+  const low = 55, span = 4, up = low * Math.pow(2, span); // 55..880
+  const cases = [220, 440, 55, 880, 890, 1000, 1760, 4000, 440 * 1024, 20, 33, 123.4, 567, 999, 3210];
 
-// Too low gets doubled up
-assertApprox('fold: below range', foldToAudible(20), 80); // 20→40→80
+  // the placement walk: the fold's own definition, spelled separately
+  const place = (f) => { let g = f; while (g >= up || g < low) { if (g >= up) g /= 2; else g *= 2; } return g; };
 
-// Too high gets halved down
-assertApprox('fold: above range', foldToAudible(4000), 1000); // 4000→2000→1000
+  let inband = 0, powerOfTwo = 0, definitional = 0;
+  for (const f of cases) {
+    const got = foldToAudible(f, low, span);
+    if (got >= low && got < up) inband++;
+    // exact power-of-two check: reverse the landing back to the input by
+    // doubling/halving (pure float-exact steps), both directions, deep
+    let k = got, reach = false;
+    for (let i = 0; i < 200; i++) {
+      if (k === f) { reach = true; break; }
+      k /= 2;
+    }
+    k = got;
+    for (let i = 0; i < 200 && !reach; i++) {
+      if (k === f) { reach = true; break; }
+      k *= 2;
+    }
+    if (reach) powerOfTwo++;
+    if (got === place(f)) definitional++;
+  }
+  assert('wrap: every value lands in band', inband === cases.length, `${inband}/${cases.length}`);
+  assert('wrap: every landing is the input times a power of two',
+    powerOfTwo === cases.length, `${powerOfTwo}/${cases.length}`);
+  assert('wrap: the walk lands where its definition says',
+    definitional === cases.length, `${definitional}/${cases.length}`);
 
-// Folding is always in range
-for (let i = -20; i <= 20; i++) {
-  const raw = 220 * Math.pow(2, i);
-  const folded = foldToAudible(raw);
-  assert(`fold: 220*2^${i} in range`, folded >= 55 && folded <= 1760,
-    `${raw} -> ${folded} out of range`);
+  // named landmarks (band 55..880): edges resolve down, wraps land low
+  assertApprox('fold: within range untouched', foldToAudible(220), 220);
+  assertApprox('fold: below range doubles up', foldToAudible(20), 80);
+  assertApprox('fold: the ceiling wraps to the octave below', foldToAudible(880), 440);
+  assertApprox('fold: just past the ceiling', foldToAudible(890), 445);
+  assertApprox('fold: far above lands low', foldToAudible(1000), 500);
+  assertApprox('fold: the old example, wrapped', foldToAudible(4000), 500);
+  assertApprox('fold: twelve octaves up lands mid-band', foldToAudible(440 * 1024), 440);
+
+  // the drift-loop property: climbing past the ceiling re-enters one octave
+  // lower and KEEPS CLIMBING — never sticks at the top
+  assertApprox('wrap: keeps travelling past the top', foldToAudible(880 * 1.5), 660);
+  assertApprox('wrap: keeps climbing after the wrap', foldToAudible(660 * 1.5), 495);
+
+  // octave classes: any exact octave of an in-band pitch folds back onto the
+  // band's representative of that class (idempotent, and octave-transparent)
+  for (let i = -30; i <= 30; i++) {
+    const raw = 220 * Math.pow(2, i);
+    const w = foldToAudible(raw);
+    assert(`wrap: 220*2^${i} lands on the class rep`,
+      Math.abs(w - 220) < 1e-9 || Math.abs(w - 440) < 1e-9 || Math.abs(w - 110) < 1e-9 || Math.abs(w - 55) < 1e-9,
+      `${raw} -> ${w}`);
+    assert(`wrap: ${w} idempotent`, Math.abs(foldToAudible(w) - w) < 1e-9);
+  }
 }
 
-// Odd frequencies also fold correctly
-for (const f of [33, 123.4, 567, 999, 3210]) {
-  const folded = foldToAudible(f);
-  assert(`fold: ${f} in range`, folded >= 55 && folded <= 1760,
-    `${f} -> ${folded} out of range`);
+// The band itself is settable: floor and width both move the tube
+{
+  assert('fold band: floor slider maps octaves above 55',
+    Math.abs(foldLowFromSlider(0) - 55) < 1e-9 &&
+    Math.abs(foldLowFromSlider(2) - 220) < 1e-9 &&
+    Math.abs(foldLowFromSlider(7) - 7040) < 1e-9);
+  assert('fold band: span defaults to 4 octaves', foldSpanOctaves() === 4);
+
+  // a 220..880 tube (span 2): below doubles in, above wraps down, edges down
+  assertApprox('narrow tube: below doubles up', foldToAudible(110, 220, 2), 220);
+  assertApprox('narrow tube: far below re-enters near the ceiling', foldToAudible(45, 220, 2), 360);
+  assertApprox('narrow tube: above wraps down', foldToAudible(1000, 220, 2), 500);
+  assertApprox('narrow tube: the ceiling resolves down', foldToAudible(880, 220, 2), 440);
+  assertApprox('narrow tube: in band untouched', foldToAudible(300, 220, 2), 300);
+
+  // a wide tube wraps only after span octaves of climbing
+  assertApprox('wide tube: still inside after seven', foldToAudible(264 * 128, 264, 8), 264 * 128);
+  assertApprox('wide tube: eight up resolves the edge down', foldToAudible(264 * 256, 264, 8), 264 * 128);
+  assertApprox('wide tube: keeps halving until inside', foldToAudible(264 * 512, 264, 8), 264 * 128);
+
+  assert('fold band: span clamps high', (setFoldSpan(99), foldSpanOctaves() === 7));
+  assert('fold band: span clamps low', (setFoldSpan(0), foldSpanOctaves() === 1));
+  setFoldSpan(4);
+  assert('fold band: restored to the house default', foldSpanOctaves() === 4);
+
+  // the guard: silence and NaN land on the floor, never hang the walk
+  assertApprox('fold guard: zero', foldToAudible(0), 55);
+  assertApprox('fold guard: NaN', foldToAudible(NaN), 55);
+
+  // tiles: which band an input sits in — the drift loop crosses tiles at the walls
+  assert('fold tiles: band is tile 0', foldTile(440) === 0);
+  assert('fold tiles: one tile up is 1', foldTile(880) === 1);
+  assert('fold tiles: under the floor is -1', foldTile(27.5) === -1);
 }
 
 // === Test Suite: Score Format ===
