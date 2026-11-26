@@ -304,9 +304,112 @@ function formatScore(events) {
 // song only ever visits exact 5-limit scale degrees (regression-tested).
 // Add songs in this shape and the tests will grade them.
 
+// Octave-shift an exponent vector until its ratio lies in [1, 2): a degree
+// below the root (ti down = 15:16, la down = 5:6, sol down = 3:4) folds onto
+// the same pitch class as its upward twin, so purity is graded by class.
+function foldToOctave(exp) {
+  const v = [...exp];
+  let r = Math.pow(2, v[0]) * Math.pow(3, v[1]) * Math.pow(5, v[2]) * Math.pow(7, v[3]);
+  while (r < 1 - 1e-9) { v[0]++; r *= 2; }
+  while (r >= 2 + 1e-9) { v[0]--; r /= 2; }
+  return v;
+}
+
+// The pure 5-limit scale degrees, canonical reps in [1, 2).
+const SONG_DEGREES = new Set([
+  '0,0,0,0', '1,0,0,0', '-3,2,0,0', '-2,0,1,0',
+  '2,-1,0,0', '-1,1,0,0', '0,-1,1,0', '-3,1,1,0',
+]); // do do' re mi fa sol la ti
+
+// Every score is played by movement keys, and every movement key is a clean
+// ratio — so consecutive notes are ALWAYS pure against each other. What a song
+// can't control is which side of the comma its LANDINGS fall on, and where the
+// drift ends up. So each song declares a kind, and the grader holds it to it:
+//
+//   'anchored'    every landing is a pure degree against the root (octave
+//                 folded), and the drift ends home: plays with the hum,
+//                 loops identically forever.
+//   'round trip'  ends home, but visits off-degree landings on the way: the
+//                 steps stay clean, the commas wander, the loop still ties off.
+//   'drifting'    ends off home by its declared `drift` vector — that drift IS
+//                 the piece: each loop pass re-centers the tune by exactly that
+//                 ratio, so it slowly goes out of its own tune. Up front about
+//                 it, and the reset key (0) is always there.
+//
+// gradeSongPurity walks a song's events the way the instrument does;
+// songKindOk checks a song's declaration against the walk.
+function gradeSongPurity(song) {
+  const { events, errors } = parseScore(song.score);
+  let vec = [0, 0, 0, 0];
+  let landingsPure = true;
+  let sawSpace = false;
+  for (const ev of events) {
+    if (ev.type === 'sethz' || !ev.down) continue;
+    if (ev.code === 'Space') { sawSpace = true; continue; }
+    if (ev.code === 'Digit0') { vec = [0, 0, 0, 0]; continue; }
+    const move = ALL_MOVES[ev.code];
+    if (!move) continue; // chords, hum etc. don't move the root
+    vec = vec.map((e, i) => e + move.vector.exp[i]);
+    if (!SONG_DEGREES.has(foldToOctave(vec).join(','))) landingsPure = false;
+  }
+  return { events, errors, net: vec, landingsPure, sawSpace };
+}
+
+function songKindOk(song, g) {
+  const endsHome = g.net.every(e => e === 0);
+  switch (song.kind) {
+    case 'anchored':   return g.landingsPure && endsHome;
+    case 'round trip': return !g.landingsPure && endsHome;
+    case 'drifting':   return !endsHome && Array.isArray(song.drift)
+                         && song.drift.length === 4
+                         && song.drift.join(',') === g.net.join(',');
+    default:           return false; // undeclared or unknown kind: not upfront
+  }
+}
+
+function ratioString(exp) {
+  let num = 1, den = 1;
+  [2, 3, 5, 7].forEach((p, i) => {
+    const e = exp[i] || 0;
+    if (e >= 0) num *= Math.pow(p, e); else den *= Math.pow(p, -e);
+  });
+  return `${num}:${den}`;
+}
+
+function driftCents(exp) {
+  const r = [2, 3, 5, 7].reduce((acc, p, i) => acc * Math.pow(p, exp[i] || 0), 1);
+  return Math.round(1200 * Math.log2(r) * 10) / 10;
+}
+
+// The honest label: shown on the song picker and spoken when a song loads.
+function kindBadge(song) {
+  switch (song.kind) {
+    case 'anchored':   return 'pure steps';
+    case 'round trip': return 'round trip';
+    case 'drifting': {
+      const c = driftCents(song.drift || [0, 0, 0, 0]);
+      return `drifts ${c >= 0 ? '+' : ''}${c}\u00A2/loop`;
+    }
+    default: return 'kind?';
+  }
+}
+
+function songKindNote(song) {
+  switch (song.kind) {
+    case 'anchored':   return 'anchored — every landing pure against the root, ends home, loops identical';
+    case 'round trip': return 'round trip — clean steps that wander off-degree, but walks home; loops identical';
+    case 'drifting': {
+      const c = driftCents(song.drift || [0, 0, 0, 0]);
+      return `drifting — each loop re-centers the tune by ${ratioString(song.drift || [0, 0, 0, 0])} (${c >= 0 ? '+' : ''}${c}\u00A2); press 0 to bring the root home`;
+    }
+    default: return 'kind undeclared';
+  }
+}
+
 const SONGS = [
   {
     name: "Twinkle, twinkle — pure steps",
+    kind: 'anchored',
     score: `# twinkle — one octave, six degrees, every step the pure one:
 # q sol · 4 up small tone · v down small tone · b down big tone · g down semitone
 # steps chosen so each note rings pure against the drone — enable loop to vary it
@@ -452,6 +555,7 @@ const SONGS = [
   },
   {
     name: "Ode to joy — theme",
+    kind: 'anchored',
     score: `# ode to joy — the whole theme is diatonic walkwork off mi:
 # t = 16:15 · 5 up big tone · 4 up small tone · b/v/g down
 # turn on loop for the repeats
@@ -517,6 +621,7 @@ const SONGS = [
   },
   {
     name: "Joy — the falling octave",
+    kind: 'anchored',
     score: `# joy to the world — grab the octave and let the scale fall:
 # do' then g b v b g v b — the octave in pure descending steps,
 # landing on a major triad bloom over the drone
@@ -568,6 +673,7 @@ const SONGS = [
   },
   {
     name: "Somewhere, over the rainbow",
+    kind: 'anchored',
     score: `# somewhere, over the rainbow — the opening, anchored on do
 # one held space: the octave leaps, then g ti, b la, v sol, b fa, g mi
 
@@ -590,6 +696,7 @@ const SONGS = [
   },
   {
     name: "Saria's Song — pure steps",
+    kind: 'anchored',
     score: `# saria's song (ocarina of time) — the real tune, in C, root = do
 # F=fa A=la B=ti E=mi D=re G=sol, the tune's high C = do'
 # two-step gaps glide through silent pure waypoints on the way off the note:
@@ -641,6 +748,123 @@ const SONGS = [
 31.92  space-
 32.22  .
 32.37  0+ 0-
+`,
+  },
+  {
+    name: "Halo — theme song",
+    kind: 'anchored',
+    score: `# halo (theme song) — the five-note figure on one held bow: la · do' · ti · sol · la
+# (A4 440 · C5 528 · B4 495 · G4 396 · A4 440 over do = C4 at 264)
+# tuned up silently before the bow sounds: 5,4,w land re, mi, la with space
+# still closed — the D never speaks · sol->la steps the small tone (4) · after
+# the bow lifts, the octave shift, undone: r steps up to do', z drops it home
+
+0.00 sethz 264
+0.01 5+ 5-
+0.20 4+ w+ 4- w-
+0.22 space+
+1.40 r+ r-
+2.50 g+ g-
+3.60 d+ d-
+4.70 4+ 4-
+5.50 space-
+5.60 r+ z+ r- z-
+`,
+  },
+  {
+    name: "Zelda's Lullaby — pure steps",
+    kind: 'anchored',
+    score: `# zelda's lullaby (ocarina of time) — the B-D-A rock and the C-B-A sigh, sung low
+# around do = C4 at 264, exactly as transcribed: the lullaby hangs BELOW the
+# root (B3 ti-down · A3 la-down · G3 sol-down) — pure folded degrees, no sethz
+# three chords in the draft were a few cents sharp, made pure here: B->D rides
+# one r (6:5, the 5,t stopped at 135:64 mid-flight) · D->A3 uses b,f through C
+# (the s landed 27:32 = 222.75, not 220) · the high A takes 4,w through mi (the
+# q landed 27:16, not the true octave 440), then descends G-D-C-B-A by v,s,b,g,b
+# straight down, every step pure · and the return home is r, not w: from A3 the
+# 6:5 climbs to exactly C — the draft's w, 4:3, would have landed 293, a flat D
+
+0.00 sethz 264
+0.01  g+ g-
+0.02  space+
+0.50  r+ r-
+1.00  b+ f+ b- f-
+1.50  v+ v-
+1.75  4+ 4-
+2.25  5+ 5-
+2.75  r+ r-
+3.25  4+ w+ 4- w-
+3.75  v+ v-
+4.00  s+ s-
+4.50  b+ b-
+4.75  g+ g-
+5.00  b+ b-
+5.50  space-
+5.50  v+ v-
+5.75  space+
+6.00  4+ 4-
+6.25  space-
+6.25  r+ r-
+`,
+  },
+  {
+    name: "Halo — theme song — as first transcribed",
+    kind: 'drifting',
+    drift: [-4, 4, -1, 0], // 81:80 — the tune rises one syntonic comma per loop
+    score: `# the theme exactly as first transcribed — the drifter's own copy. every step is
+# a clean ratio off a silent re (D stays tuning, never tone), and NONE of the
+# landings is a degree of C: 27/16 · 81/40 · 243/128 · 243/160 · 2187/1280 —
+# pure fifths, thirds and tones all the way, all against where they came from,
+# not against home. the lifted bow's b+a means to walk back but lands at 81:80,
+# one syntonic comma sharp — which is the whole point: loop it and the tune
+# climbs 21.5 cents every pass, going slowly out of its own tune forever.
+# (it takes about 56 loops to round the octave back around)
+
+0.00 sethz 264
+0.01 5+ 5-
+0.22 space+
+0.20 q+ q-
+1.40 r+ r-
+2.50 g+ g-
+3.60 d+ d-
+4.70 5+ 5-
+5.50 space-
+5.60 b+ a+
+5.61 b- a-
+`,
+  },
+  {
+    name: "Zelda's Lullaby — as first transcribed",
+    kind: 'round trip',
+    score: `# the lullaby exactly as transcribed — every step a clean ratio, the drift
+# wandering wherever the tune goes, and the walk ties off home by the last key.
+# the comma detours are the feature, not the bug: the s at 1.0 stands on
+# 27:32 (A3 at 222.75, a syntonic comma proud of true), the q leaps the
+# Pythagorean 27:16 fifth (445.5), the B->D pair passes through 135:64 —
+# each still pure against the note it just left, none of them pure against C.
+# one edit only: the closing step is r, not w — from A3 the true 6:5 climb to
+# C is r (w's 4:3 lands a small tone short, at 10:9); with it the loop ties.
+
+0 g+ g-
+0 space+
+.5 5+ t+ 5- t-
+1 s+ s-
+1.5 v+ v-
+1.75 4+ 4-
+2.25 4+ 4-
+2.75 5+ t+ 5- t-
+3.25 q+ q-
+3.75 b+ b-
+4 s+ s-
+4.5 b+ b-
+4.75 g+ g-
+5 b+ b-
+5.5 space-
+5.5 v+ v-
+5.75 space+
+6 4+ 4-
+6.25 space-
+6.25 r+ r-
 `,
   }
 ];

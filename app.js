@@ -1670,7 +1670,7 @@ function loadSong(i) {
   }
   scoreEl.value = song.score;
   saveScore();
-  setStatus(`“${song.name}” loaded — press play`);
+  setStatus(`“${song.name}” loaded — ${songKindNote(song)} — press play`);
 }
 
 // Snap the instrument back to defaults so a pass starts where the score
@@ -1821,12 +1821,14 @@ function setupSessionControls() {
     setStatus('previous score restored');
   });
 
-  // Song picker: built-in tunes, each verified pure by the test suite.
+  // Song picker: built-in tunes, each graded by its declared kind (anchored /
+  // round trip / drifting) — the badge tells you before you press play.
   pbSongsEl = document.getElementById('pb-songs');
   for (const [i, song] of SONGS.entries()) {
     const opt = document.createElement('option');
     opt.value = String(i);
-    opt.textContent = song.name;
+    opt.textContent = `${song.name}  —  ${kindBadge(song)}`;
+    opt.title = songKindNote(song);
     pbSongsEl.appendChild(opt);
   }
   pbSongsEl.addEventListener('change', () => loadSong(parseInt(pbSongsEl.value, 10)));

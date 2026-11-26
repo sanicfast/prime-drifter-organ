@@ -254,34 +254,51 @@ assert('score: every code round-trips its token',
 
 // === Test Suite: Built-in Songs ===
 
-// The song book must stay pure: simulate each score's drift vector and insist
-// it only ever visits exact 5-limit scale degrees, and ends back at the root.
+// Every song declares a kind — 'anchored', 'round trip', or 'drifting' — and
+// the suite holds it to exactly that declaration: anchored songs only ever
+// visit pure 5-limit degrees (octave-folded, so a ti below the root grades as
+// the same degree as a ti above) and end home; round trips end home but are
+// required to actually wander; drifting songs must end exactly where their
+// declared drift says, so the catalog is honest about tunes that slowly go
+// out of themselves on repeat.
 {
-  const PURE = new Set([
-    '0,0,0,0', '1,0,0,0', '-3,2,0,0', '-2,0,1,0',
-    '2,-1,0,0', '-1,1,0,0', '0,-1,1,0', '-3,1,1,0',
-  ]); // do do' re mi fa sol la ti
   assert('songs: catalog has tunes', SONGS.length >= 4);
+  assert('songs: every song declares a known kind',
+    SONGS.every(s => ['anchored', 'round trip', 'drifting'].includes(s.kind)));
   for (const song of SONGS) {
-    const { events, errors } = parseScore(song.score);
-    assert(`song "${song.name}": parses clean`, errors.length === 0 && events.length > 8);
-    let vec = [0, 0, 0, 0];
-    let pure = true;
-    let sawSpace = false;
-    for (const ev of events) {
-      if (ev.type === 'sethz' || !ev.down) continue;
-      if (ev.code === 'Space') { sawSpace = true; continue; }
-      if (ev.code === 'Digit0') { vec = [0, 0, 0, 0]; continue; }
-      const move = ALL_MOVES[ev.code];
-      if (!move) continue; // chords, hum etc. don't move the root
-      vec = vec.map((e, i) => e + move.vector.exp[i]);
-      if (!PURE.has(vec.join(','))) pure = false;
-    }
-    assert(`song "${song.name}": sounds`, sawSpace);
-    assert(`song "${song.name}": every landing is a pure JI degree`, pure);
-    assert(`song "${song.name}": ends home`, vec.join(',') === '0,0,0,0');
-    assert(`song "${song.name}": round-trips through format`, parseScore(formatScore(events)).errors.length === 0);
+    const g = gradeSongPurity(song);
+    assert(`song "${song.name}": parses clean`, g.errors.length === 0 && g.events.length > 8);
+    assert(`song "${song.name}": sounds`, g.sawSpace);
+    assert(`song "${song.name}": is what it claims (${song.kind})`, songKindOk(song, g),
+      `net [${g.net}], landingsPure ${g.landingsPure}`);
+    assert(`song "${song.name}": round-trips through format`,
+      parseScore(formatScore(g.events)).errors.length === 0);
   }
+}
+
+// The grader must actually discriminate, not rubber-stamp.
+{
+  const bow = '0.00 sethz 264\n0.05 space+\n';
+  const walk = e => ({ score: bow + e + '0.95 space-' });
+  const g1 = gradeSongPurity(walk('0.10 e+\n0.20 d+\n'));          // mi, home
+  assert('kinds: clean round trip grades pure and home',
+    g1.landingsPure && g1.net.join(',') === '0,0,0,0');
+  const g2 = gradeSongPurity(walk('0.10 e+\n0.20 e+\n0.30 d+\n0.40 d+\n')); // 25/16 mid-walk
+  assert('kinds: comma wander is caught (not pure)', !g2.landingsPure);
+  assert('kinds: comma wander still ends home', g2.net.join(',') === '0,0,0,0');
+  const g3 = gradeSongPurity(walk('0.10 q+\n'));                    // drifts to sol
+  assert('kinds: un-closed drift detected', g3.net.join(',') === '-1,1,0,0');
+  // mislabelled kinds must fail in every direction
+  assert('kinds: liar rejected — wanderer claiming anchored',
+    !songKindOk({ kind: 'anchored', score: walk('0.10 e+\n0.20 e+\n0.30 d+\n0.40 d+\n').score }, g2));
+  assert('kinds: liar rejected — homebody claiming drifting',
+    !songKindOk({ kind: 'drifting', drift: [-1, 1, 0, 0], score: walk('0.10 e+\n0.20 d+\n').score }, g1));
+  assert('kinds: liar rejected — drift not matching its claim',
+    !songKindOk({ kind: 'drifting', drift: [-2, 2, 0, 0], score: walk('0.10 q+\n').score }, g3));
+  assert('kinds: undeclared kind rejected',
+    !songKindOk({ score: bow }, g1));
+  assert('kinds: labels',
+    ratioString([-4, 4, -1, 0]) === '81:80' && driftCents([-4, 4, -1, 0]) === 21.5);
 }
 
 // === Render Results ===
